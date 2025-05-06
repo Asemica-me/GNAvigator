@@ -1,0 +1,15 @@
+mistralai
+langchain_community 
+langchain_mistralai
+langchain_huggingface 
+torch 
+torchvision 
+torchaudio
+faiss-cpu 
+streamlit
+mwparserfromhell
+transformers 
+accelerate 
+torch
+bitsandbytes
+llama-cpp-python
