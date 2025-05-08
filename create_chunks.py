@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 import asyncio
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, NavigableString
 import xml.etree.ElementTree as ET
 import httpx
 from urllib.parse import urljoin
@@ -13,7 +13,7 @@ import json
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from huggingface_hub import InferenceClient, login
 from transformers import pipeline
-from tqdm import tqdm
+from tqdm.asyncio import tqdm
 
 # Load the Italian spaCy model
 nlp = spacy.load("it_core_news_sm")
@@ -31,7 +31,6 @@ client = InferenceClient(model=llm, token=api_key)
 # Global variables
 SITEMAP_PATH = 'GNA_sitemap.xml'
 BASE_DOMAIN = 'https://gna.cultura.gov.it'
-
 OUTPUT_FOLDER = "data"
 OUTPUT_FILENAME = "chunks_memory.json"
 
@@ -60,44 +59,52 @@ def get_urls_from_sitemap_file(file_path: str) -> list:
 
 async def fetch_and_process_page(client: httpx.AsyncClient, url: str, base_domain: str) -> dict:
     """
-    Asynchronously fetch and process content (text, tables, images) from a wiki page.
-    Separates text, tables, and image URLs.
+    Asynchronously fetch and process content from a web page, extracting text
+    in a hierarchical structure based on HTML.
     """
     try:
         response = await client.get(url, timeout=10.0)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'lxml')
-        content = soup.find('div', {'id': 'mw-content-text'})
+        content = soup.find('div', {'id': 'mw-content-text'})  # Or the main content div
         if not content:
-            return {'url': url, 'text': "", 'tables': [], 'image_urls': [], 'title': "No Title"}
-
-        # Extract text
-        text_elements = content.find_all(['p', 'ul', 'ol', 'h2', 'h3', 'h4', 'h5', 'h6'])
-        text = "\n\n".join(t.get_text(strip=True) for t in text_elements if t.get_text(strip=True))
-
-        # Extract tables
-        tables_html = [str(table) for table in content.find_all('table', class_='wikitable')]
-
-        # Extract image URLs
-        image_urls = set()
-        for a_tag in content.find_all('a', class_='image'):
-            href = a_tag.get('href')
-            if href:
-                image_urls.add(urljoin(base_domain, href))
-        for img_tag in content.find_all('img'):
-            src = img_tag.get('src')
-            if src:
-                image_urls.add(urljoin(base_domain, src))
+            return {'url': url, 'title': "No Title", 'content': ""}
 
         title_tag = soup.find('h1', id='firstHeading')
         title = title_tag.text if title_tag else "No Title"
 
+        # Recursive function to extract text with HTML structure
+        def extract_text_with_structure(element):
+            text_list = []
+            for child in element.descendants: # Changed from recursiveChildGenerator to descendants
+                if isinstance(child, NavigableString):
+                    text = child.strip()
+                    if text:
+                        text_list.append({'type': 'text', 'content': text})
+                elif child.name in ['h2', 'h3', 'h4', 'h5', 'h6']:
+                    text = child.get_text(strip=True)
+                    if text:
+                        text_list.append({'type': child.name, 'content': text})
+                elif child.name == 'p':
+                    text = child.get_text(strip=True)
+                    if text:
+                         text_list.append({'type': 'paragraph', 'content': text})
+                elif child.name == 'table' and 'wikitable' in child.get('class', []):
+                    #convert table to string
+                    text_list.append({'type': 'table', 'content': str(child)})
+                elif child.name == 'img':
+                    src = child.get('src')
+                    if src:
+                        image_url = urljoin(base_domain, src)
+                        text_list.append({'type': 'image', 'content': image_url})
+            return text_list
+
+        page_content = extract_text_with_structure(content)
+
         return {
             'url': url,
             'title': title,
-            'text': text,
-            'tables': tables_html,
-            'image_urls': list(image_urls)
+            'content': page_content,  # Hierarchical list of text, tables, and images
         }
     except httpx.RequestError as e:
         print(f"HTTP request error for {url}: {e}")
@@ -108,79 +115,140 @@ async def fetch_and_process_page(client: httpx.AsyncClient, url: str, base_domai
 
 async def create_semantic_chunks(page_data: dict, chunk_size: int = 512, chunk_overlap: int = 100):
     """
-    Creates context-aware chunks with metadata from the page data.
+    Creates context-aware chunks with metadata from the page data, handling
+    the hierarchical content structure.
     """
     url = page_data['url']
     title = page_data['title']
     chunks = []
     chunk_index = 0
-
-    def create_text_chunk(text_content):
+    
+    def create_text_chunk(text_content, chunk_type="text"):
         """Helper function to create a text chunk."""
-        nonlocal chunk_index  # Allow modification of chunk_index
+        nonlocal chunk_index
         doc = nlp(text_content)
         unique_entities = list(set([(ent.text, ent.label_) for ent in doc.ents]))
         chunk = {
             'chunk_id': generate_chunk_id(url, chunk_index),
             'source': url,
-            'content_type': 'text',
-            'questions': [],  # Placeholder for questions
+            'content_type': chunk_type,
+            'questions': [],
             'title': title,
             'keywords': [token.text for token in doc if token.pos_ in ("NOUN", "ADJ")],
             'entities': unique_entities,
-            'content': text_content
+            'content': text_content,
         }
         chunk_index += 1
         return chunk
 
-    # Chunk text content
-    if page_data['text']:
-        paragraphs = [p for p in page_data['text'].split("\n\n") if p.strip()]
-        current_chunk = ""
+    def process_content_list(content_list):
+        """Recursively processes the content list."""
+        nonlocal chunk_index
+        for item in content_list:
+            if item['type'] in ['h2', 'h3', 'h4', 'h5', 'h6', 'paragraph', 'text']:
+                text = item['content']
+                sentences = list(nlp(text).sents)
+                current_chunk = ""
+                previous_sentence = ""  # To store the previous sentence
 
-        for paragraph in paragraphs:
-            if len(current_chunk) + len(paragraph) <= chunk_size:
-                current_chunk += "\n\n" + paragraph if current_chunk else paragraph
-            else:
+                for sent in sentences:
+                    sent_text = sent.text_with_ws
+                    # Include previous sentence for context, if it exists and isn't too long
+                    contextual_text = (previous_sentence + " " + sent_text).strip() if previous_sentence else sent_text
+
+                    if len(current_chunk) + len(contextual_text) <= chunk_size:
+                        current_chunk += contextual_text
+                    else:
+                        if current_chunk:
+                            chunks.append(create_text_chunk(current_chunk, item['type']))
+                        current_chunk = sent_text
+
+                    previous_sentence = sent_text  # Update for the next iteration
+
                 if current_chunk:
-                    chunks.append(create_text_chunk(current_chunk))
-                current_chunk = paragraph[-chunk_overlap:] + "\n\n" + paragraph if len(paragraph) > chunk_overlap else paragraph
+                    chunks.append(create_text_chunk(current_chunk, item['type']))
 
-        # Add final chunk
-        if current_chunk:
-            chunks.append(create_text_chunk(current_chunk))
+            elif item['type'] == 'table':
+                chunk_id = generate_chunk_id(url, chunk_index)
+                chunks.append({
+                    'chunk_id': chunk_id,
+                    'source': url,
+                    'content_type': 'table',
+                    'title': title,
+                    'keywords': ['tabella'],
+                    'questions': [],
+                    'entities': [],
+                    'content': item['content'],
+                })
+                chunk_index += 1
+            elif item['type'] == 'image':
+                chunk_id = generate_chunk_id(url, chunk_index)
+                chunks.append({
+                    'chunk_id': chunk_id,
+                    'source': url,
+                    'content_type': 'image',
+                    'title': title,
+                    'keywords': ['immagine'],
+                    'questions': [],
+                    'entities': [],
+                    'content': item['content'],
+                })
+                chunk_index += 1
 
-    # Chunk tables (each table as a separate chunk)
-    for table_html in page_data['tables']:
-        chunk_id = generate_chunk_id(url, chunk_index)
-        chunks.append({
-            'chunk_id': chunk_id,
-            'source': url,
-            'content_type': 'table',
-            'title': title,
-            'keywords': ['tabella'],
-            'questions': [],
-            'entities': [],
-            'content': table_html
-        })
-        chunk_index += 1
-
-    # "Chunk" images (each image URL as a separate chunk)
-    for img_url in page_data['image_urls']:
-        chunk_id = generate_chunk_id(url, chunk_index)
-        chunks.append({
-            'chunk_id': chunk_id,
-            'source': url,
-            'content_type': 'image',
-            'title': title,
-            'keywords': ['immagine'],
-            'questions': [],
-            'entities': [],
-            'content': img_url
-        })
-        chunk_index += 1
-
+    # Process the top-level content list
+    process_content_list(page_data['content'])
     return chunks
+
+    def process_content_list(content_list):
+        """Recursively processes the content list."""
+        nonlocal chunk_index
+        for item in content_list:
+            if item['type'] in ['h2', 'h3', 'h4', 'h5', 'h6', 'paragraph', 'text']:
+                text = item['content']
+                sentences = list(nlp(text).sents)
+                current_chunk = ""
+                for sent in sentences:
+                    sent_text = sent.text_with_ws
+                    if len(current_chunk) + len(sent_text) <= chunk_size:
+                        current_chunk += sent_text
+                    else:
+                        if current_chunk:
+                            chunks.append(create_text_chunk(current_chunk, item['type'])) # Pass the type
+                        current_chunk = sent_text
+                if current_chunk:
+                    chunks.append(create_text_chunk(current_chunk, item['type'])) # Pass the type
+            elif item['type'] == 'table':
+                chunk_id = generate_chunk_id(url, chunk_index)
+                chunks.append({
+                    'chunk_id': chunk_id,
+                    'source': url,
+                    'content_type': 'table',
+                    'title': title,
+                    'keywords': ['tabella'],
+                    'questions': [],
+                    'entities': [],
+                    'content': item['content'],
+                })
+                chunk_index += 1
+            elif item['type'] == 'image':
+                chunk_id = generate_chunk_id(url, chunk_index)
+                chunks.append({
+                    'chunk_id': chunk_id,
+                    'source': url,
+                    'content_type': 'image',
+                    'title': title,
+                    'keywords': ['immagine'],
+                    'questions': [],
+                    'entities': [],
+                    'content': item['content'],
+                })
+                chunk_index += 1
+
+    # Process the top-level content list
+    process_content_list(page_data['content'])
+    return chunks
+
+
 
 async def crawl_and_chunk(sitemap_path: str, base_domain: str):
     """
@@ -188,7 +256,7 @@ async def crawl_and_chunk(sitemap_path: str, base_domain: str):
     """
     urls = get_urls_from_sitemap_file(sitemap_path)
     all_chunks = []
-    
+
     async with httpx.AsyncClient() as client:
         for url in tqdm(urls, desc="Processing URLs", unit="URL"):
             page_data = await fetch_and_process_page(client, url, base_domain)
@@ -205,6 +273,7 @@ async def crawl_and_chunk(sitemap_path: str, base_domain: str):
 
     print(f"\nChunks saved to: {OUTPUT_PATH}")
     return all_chunks
+
 
 if __name__ == "__main__":
     all_chunks_data = asyncio.run(crawl_and_chunk(SITEMAP_PATH, BASE_DOMAIN))
