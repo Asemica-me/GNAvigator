@@ -13,6 +13,7 @@ import json
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from huggingface_hub import InferenceClient, login
 from transformers import pipeline
+from tqdm import tqdm
 
 # Load the Italian spaCy model
 nlp = spacy.load("it_core_news_sm")
@@ -21,7 +22,6 @@ load_dotenv()
 # api_key = os.getenv("MISTRAL_API_KEY")
 # llm = os.getenv("MODEL")
 # client = Mistral(api_key=api_key)
-
 
 api_key = os.getenv("HF_TOKEN")
 login(token=api_key)
@@ -115,42 +115,40 @@ async def create_semantic_chunks(page_data: dict, chunk_size: int = 512, chunk_o
     chunks = []
     chunk_index = 0
 
+    def create_text_chunk(text_content):
+        """Helper function to create a text chunk."""
+        nonlocal chunk_index  # Allow modification of chunk_index
+        doc = nlp(text_content)
+        unique_entities = list(set([(ent.text, ent.label_) for ent in doc.ents]))
+        chunk = {
+            'chunk_id': generate_chunk_id(url, chunk_index),
+            'source': url,
+            'content_type': 'text',
+            'questions': [],  # Placeholder for questions
+            'title': title,
+            'keywords': [token.text for token in doc if token.pos_ in ("NOUN", "ADJ")],
+            'entities': unique_entities,
+            'content': text_content
+        }
+        chunk_index += 1
+        return chunk
+
     # Chunk text content
     if page_data['text']:
         paragraphs = [p for p in page_data['text'].split("\n\n") if p.strip()]
         current_chunk = ""
-        
+
         for paragraph in paragraphs:
-            if len(current_chunk) + len(paragraph) <= 512:
+            if len(current_chunk) + len(paragraph) <= chunk_size:
                 current_chunk += "\n\n" + paragraph if current_chunk else paragraph
             else:
                 if current_chunk:
-                
-                    doc = nlp(current_chunk)
-                    chunks.append({
-                        'chunk_id': hashlib.sha256(f"{url}-{chunk_index}".encode()).hexdigest(),
-                        'source': url,
-                        'content_type': 'text',
-                        'title': title,
-                        'keywords': [token.text for token in doc if token.pos_ in ("NOUN", "ADJ")],
-                        'entities': [(ent.text, ent.label_) for ent in doc.ents],
-                        'content': current_chunk
-                    })
-                    chunk_index += 1
-                    current_chunk = paragraph[-100:] + "\n\n" + paragraph if len(paragraph) > 100 else paragraph
+                    chunks.append(create_text_chunk(current_chunk))
+                current_chunk = paragraph[-chunk_overlap:] + "\n\n" + paragraph if len(paragraph) > chunk_overlap else paragraph
 
         # Add final chunk
         if current_chunk:
-            doc = nlp(current_chunk)
-            chunks.append({
-                'chunk_id': hashlib.sha256(f"{url}-{chunk_index}".encode()).hexdigest(),
-                'source': url,
-                'content_type': 'text',
-                'title': title,
-                'keywords': [token.text for token in doc if token.pos_ in ("NOUN", "ADJ")],
-                'entities': [(ent.text, ent.label_) for ent in doc.ents],
-                'content': current_chunk
-            })
+            chunks.append(create_text_chunk(current_chunk))
 
     # Chunk tables (each table as a separate chunk)
     for table_html in page_data['tables']:
@@ -192,7 +190,7 @@ async def crawl_and_chunk(sitemap_path: str, base_domain: str):
     all_chunks = []
     
     async with httpx.AsyncClient() as client:
-        for url in urls:
+        for url in tqdm(urls, desc="Processing URLs", unit="URL"):
             page_data = await fetch_and_process_page(client, url, base_domain)
             if page_data:
                 page_chunks = await create_semantic_chunks(page_data)
