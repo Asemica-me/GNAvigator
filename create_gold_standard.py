@@ -4,7 +4,7 @@ import hashlib
 from dotenv import load_dotenv
 from mistralai import Mistral, UserMessage
 from tqdm import tqdm
-from main_copy import create_chunks  # Import your existing chunking function
+from app_copy import create_chunks  # Import your existing chunking function
 import time
 
 # Load environment variables
