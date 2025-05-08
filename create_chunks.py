@@ -105,24 +105,6 @@ async def fetch_and_process_page(client: httpx.AsyncClient, url: str, base_domai
     except Exception as e:
         print(f"Error processing {url}: {e}")
         return None
-    
-    
-# Initialize the summarization pipeline once
-summarizer = pipeline("summarization", model="it5/it5-small-news-summarization")
-
-def generate_summary(text: str) -> str:
-    """Asynchronous wrapper for the summarization model"""
-    try:
-        # Run the synchronous model in a thread pool
-        return summarizer(
-            text[:1024],  # Truncate to model's max length
-            max_length=55,
-            min_length=40,
-            do_sample=False
-        )[0]['summary_text']
-    except Exception as e:
-        print(f"Summary error: {e}")
-        return ""
 
 async def create_semantic_chunks(page_data: dict, chunk_size: int = 512, chunk_overlap: int = 100):
     """
@@ -143,17 +125,14 @@ async def create_semantic_chunks(page_data: dict, chunk_size: int = 512, chunk_o
                 current_chunk += "\n\n" + paragraph if current_chunk else paragraph
             else:
                 if current_chunk:
-                    # Generate summary synchronously
-                    summary = generate_summary(current_chunk)
-                    
+                
                     doc = nlp(current_chunk)
                     chunks.append({
                         'chunk_id': hashlib.sha256(f"{url}-{chunk_index}".encode()).hexdigest(),
                         'source': url,
                         'content_type': 'text',
                         'title': title,
-                        'summary': summary, #imuovi
-                        'keywords': [token.text for token in doc if token.pos_ in ("NOUN", "ADJ")], #troppo lunghe, da filtrare
+                        'keywords': [token.text for token in doc if token.pos_ in ("NOUN", "ADJ")],
                         'entities': [(ent.text, ent.label_) for ent in doc.ents],
                         'content': current_chunk
                     })
@@ -168,7 +147,6 @@ async def create_semantic_chunks(page_data: dict, chunk_size: int = 512, chunk_o
                 'source': url,
                 'content_type': 'text',
                 'title': title,
-                'summary': generate_summary(current_chunk),
                 'keywords': [token.text for token in doc if token.pos_ in ("NOUN", "ADJ")],
                 'entities': [(ent.text, ent.label_) for ent in doc.ents],
                 'content': current_chunk
@@ -177,13 +155,11 @@ async def create_semantic_chunks(page_data: dict, chunk_size: int = 512, chunk_o
     # Chunk tables (each table as a separate chunk)
     for table_html in page_data['tables']:
         chunk_id = generate_chunk_id(url, chunk_index)
-        summary = f"Tabella estratta dalla pagina."
         chunks.append({
             'chunk_id': chunk_id,
             'source': url,
             'content_type': 'table',
             'title': title,
-            'summary': summary,
             'keywords': ['tabella'],
             'questions': [],
             'entities': [],
@@ -194,13 +170,11 @@ async def create_semantic_chunks(page_data: dict, chunk_size: int = 512, chunk_o
     # "Chunk" images (each image URL as a separate chunk)
     for img_url in page_data['image_urls']:
         chunk_id = generate_chunk_id(url, chunk_index)
-        summary = f"Immagine dalla pagina."
         chunks.append({
             'chunk_id': chunk_id,
             'source': url,
             'content_type': 'image',
             'title': title,
-            'summary': summary,
             'keywords': ['immagine'],
             'questions': [],
             'entities': [],
