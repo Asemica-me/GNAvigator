@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 import asyncio
-from bs4 import BeautifulSoup, NavigableString
+from bs4 import BeautifulSoup, NavigableString, Comment
 import xml.etree.ElementTree as ET
 import httpx
 from urllib.parse import urljoin
@@ -16,7 +16,7 @@ from transformers import pipeline
 from tqdm.asyncio import tqdm
 
 # Load the Italian spaCy model
-nlp = spacy.load("it_core_news_sm")
+nlp = spacy.load("it_core_news_lg")
 
 load_dotenv()
 # api_key = os.getenv("MISTRAL_API_KEY")
@@ -66,6 +66,11 @@ async def fetch_and_process_page(client: httpx.AsyncClient, url: str, base_domai
         response = await client.get(url, timeout=10.0)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'lxml')
+
+        # Remove all HTML comments from the parsed content
+        for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
+            comment.extract()  # Remove the comment from the tree
+
         content = soup.find('div', {'id': 'mw-content-text'})  # Or the main content div
         if not content:
             return {'url': url, 'title': "No Title", 'content': ""}
@@ -76,27 +81,41 @@ async def fetch_and_process_page(client: httpx.AsyncClient, url: str, base_domai
         # Recursive function to extract text with HTML structure
         def extract_text_with_structure(element):
             text_list = []
-            for child in element.descendants: # Changed from recursiveChildGenerator to descendants
+            current_paragraph = []
+            
+            for child in element.descendants:
+                if isinstance(child, Comment):
+                    continue
                 if isinstance(child, NavigableString):
                     text = child.strip()
                     if text:
-                        text_list.append({'type': 'text', 'content': text})
+                        current_paragraph.append(text)
                 elif child.name in ['h2', 'h3', 'h4', 'h5', 'h6']:
-                    text = child.get_text(strip=True)
-                    if text:
-                        text_list.append({'type': child.name, 'content': text})
+                    if current_paragraph:
+                        text_list.append({
+                            'type': 'paragraph',
+                            'content': ' '.join(current_paragraph)
+                        })
+                        current_paragraph = []
+                    text_list.append({
+                        'type': child.name,
+                        'content': child.get_text(strip=True)
+                    })
                 elif child.name == 'p':
-                    text = child.get_text(strip=True)
-                    if text:
-                         text_list.append({'type': 'paragraph', 'content': text})
-                elif child.name == 'table' and 'wikitable' in child.get('class', []):
-                    #convert table to string
-                    text_list.append({'type': 'table', 'content': str(child)})
-                elif child.name == 'img':
-                    src = child.get('src')
-                    if src:
-                        image_url = urljoin(base_domain, src)
-                        text_list.append({'type': 'image', 'content': image_url})
+                    if current_paragraph:
+                        text_list.append({
+                            'type': 'paragraph',
+                            'content': ' '.join(current_paragraph)
+                        })
+                        current_paragraph = []
+            
+            # Add any remaining text
+            if current_paragraph:
+                text_list.append({
+                    'type': 'paragraph',
+                    'content': ' '.join(current_paragraph)
+                })
+            
             return text_list
 
         page_content = extract_text_with_structure(content)
@@ -112,142 +131,133 @@ async def fetch_and_process_page(client: httpx.AsyncClient, url: str, base_domai
     except Exception as e:
         print(f"Error processing {url}: {e}")
         return None
+    
+from keybert import KeyBERT
+kw_model = KeyBERT()
+import nltk
+from nltk.corpus import stopwords
 
-async def create_semantic_chunks(page_data: dict, chunk_size: int = 512, chunk_overlap: int = 100):
+nltk.download('stopwords')
+# Load Italian stopwords
+italian_stopwords = stopwords.words('italian')
+
+# Add custom stopwords PROPERLY TOKENIZED
+custom_stopwords = ["così", "torna", "su"]  # Split multi-word terms
+italian_stopwords += [word.lower() for word in custom_stopwords]
+
+# Preprocess with spaCy for better matching
+italian_stopwords = list(set([
+    token.text.lower() 
+    for doc in nlp.pipe(italian_stopwords) 
+    for token in doc
+]))
+
+async def create_semantic_chunks(page_data: dict, chunk_size: int = 1024, chunk_overlap: int = 256):
     """
-    Creates context-aware chunks with metadata from the page data, handling
-    the hierarchical content structure.
+    Creates context-aware chunks with complete sentences and structural context.
     """
     url = page_data['url']
     title = page_data['title']
     chunks = []
     chunk_index = 0
-    
-    def create_text_chunk(text_content, chunk_type="text"):
-        """Helper function to create a text chunk."""
+    current_context = []  # Track hierarchical headers for context
+
+    def create_text_chunk(text_content, chunk_type="text", headers_context=None):
         nonlocal chunk_index
+        
+        # Load spaCy doc for entities/other metadata
         doc = nlp(text_content)
         unique_entities = list(set([(ent.text, ent.label_) for ent in doc.ents]))
+        
+        # KeyBERT keyword extraction
+        keywords = kw_model.extract_keywords(
+            text_content,
+            keyphrase_ngram_range=(1, 2),  # Allow single words or phrases   
+            stop_words=italian_stopwords,  # Use Italian stopwords  
+            top_n=10,
+            use_mmr=True,
+            diversity=0.5,                 # Adjust diversity for more varied keywords
+        )
+        
+        # Extract keyword strings (discard scores)
+        keyword_list = [kw[0] for kw in keywords] if keywords else []
+        
         chunk = {
             'chunk_id': generate_chunk_id(url, chunk_index),
             'source': url,
             'content_type': chunk_type,
             'questions': [],
             'title': title,
-            'keywords': [token.text for token in doc if token.pos_ in ("NOUN", "ADJ")],
+            'headers_context': headers_context.copy() if headers_context else [],
+            'keywords': keyword_list,  # Replaced spaCy logic with KeyBERT keywords
             'entities': unique_entities,
             'content': text_content,
         }
         chunk_index += 1
         return chunk
 
-    def process_content_list(content_list):
-        """Recursively processes the content list."""
-        nonlocal chunk_index
+    def process_content_list(content_list, current_headers=None):
+        nonlocal chunk_index, current_context
+        current_headers = current_headers or []
+        buffer = []
+        current_length = 0
+        sentence_lengths = []  # Track lengths of sentences in buffer
+        
         for item in content_list:
-            if item['type'] in ['h2', 'h3', 'h4', 'h5', 'h6', 'paragraph', 'text']:
-                text = item['content']
-                sentences = list(nlp(text).sents)
-                current_chunk = ""
-                previous_sentence = ""  # To store the previous sentence
+            # Update header context
+            if item['type'].startswith('h'):
+                header_level = int(item['type'][1:])
+                current_headers = current_headers[:header_level-2] + [item['content']]
+                current_context = current_headers
+            
+            if item['type'] in ['paragraph', 'text']:
+                # Process text content with sentence-aware splitting
+                sentences = [sent.text_with_ws for sent in nlp(item['content']).sents]
+                
+                for sentence in sentences:
+                    sent_len = len(sentence)
+                    
+                    if current_length + sent_len > chunk_size:
+                        # Create chunk from buffer
+                        if buffer:
+                            chunk_text = " ".join(buffer)
+                            chunks.append(create_text_chunk(
+                                chunk_text, 
+                                chunk_type="text",
+                                headers_context=current_context
+                            ))
+                            
+                            # Calculate overlap using actual sentence lengths
+                            overlap_total = 0
+                            overlap_index = len(buffer) - 1
+                            
+                            # Work backwards to find overlap sentences
+                            while overlap_index >= 0 and overlap_total < chunk_overlap:
+                                overlap_total += sentence_lengths[overlap_index]
+                                overlap_index -= 1
+                            
+                            # Keep overlapping sentences
+                            overlap_start = max(0, overlap_index + 1)
+                            buffer = buffer[overlap_start:]
+                            sentence_lengths = sentence_lengths[overlap_start:]
+                            current_length = sum(sentence_lengths)
+                    
+                    buffer.append(sentence)
+                    sentence_lengths.append(sent_len)
+                    current_length += sent_len
 
-                for sent in sentences:
-                    sent_text = sent.text_with_ws
-                    # Include previous sentence for context, if it exists and isn't too long
-                    contextual_text = (previous_sentence + " " + sent_text).strip() if previous_sentence else sent_text
+        # Add remaining content
+        if buffer:
+            chunk_text = " ".join(buffer)
+            chunks.append(create_text_chunk(
+                chunk_text, 
+                chunk_type="text",
+                headers_context=current_context
+            ))
 
-                    if len(current_chunk) + len(contextual_text) <= chunk_size:
-                        current_chunk += contextual_text
-                    else:
-                        if current_chunk:
-                            chunks.append(create_text_chunk(current_chunk, item['type']))
-                        current_chunk = sent_text
-
-                    previous_sentence = sent_text  # Update for the next iteration
-
-                if current_chunk:
-                    chunks.append(create_text_chunk(current_chunk, item['type']))
-
-            elif item['type'] == 'table':
-                chunk_id = generate_chunk_id(url, chunk_index)
-                chunks.append({
-                    'chunk_id': chunk_id,
-                    'source': url,
-                    'content_type': 'table',
-                    'title': title,
-                    'keywords': ['tabella'],
-                    'questions': [],
-                    'entities': [],
-                    'content': item['content'],
-                })
-                chunk_index += 1
-            elif item['type'] == 'image':
-                chunk_id = generate_chunk_id(url, chunk_index)
-                chunks.append({
-                    'chunk_id': chunk_id,
-                    'source': url,
-                    'content_type': 'image',
-                    'title': title,
-                    'keywords': ['immagine'],
-                    'questions': [],
-                    'entities': [],
-                    'content': item['content'],
-                })
-                chunk_index += 1
-
-    # Process the top-level content list
+    # Process the content with header tracking
     process_content_list(page_data['content'])
     return chunks
-
-    def process_content_list(content_list):
-        """Recursively processes the content list."""
-        nonlocal chunk_index
-        for item in content_list:
-            if item['type'] in ['h2', 'h3', 'h4', 'h5', 'h6', 'paragraph', 'text']:
-                text = item['content']
-                sentences = list(nlp(text).sents)
-                current_chunk = ""
-                for sent in sentences:
-                    sent_text = sent.text_with_ws
-                    if len(current_chunk) + len(sent_text) <= chunk_size:
-                        current_chunk += sent_text
-                    else:
-                        if current_chunk:
-                            chunks.append(create_text_chunk(current_chunk, item['type'])) # Pass the type
-                        current_chunk = sent_text
-                if current_chunk:
-                    chunks.append(create_text_chunk(current_chunk, item['type'])) # Pass the type
-            elif item['type'] == 'table':
-                chunk_id = generate_chunk_id(url, chunk_index)
-                chunks.append({
-                    'chunk_id': chunk_id,
-                    'source': url,
-                    'content_type': 'table',
-                    'title': title,
-                    'keywords': ['tabella'],
-                    'questions': [],
-                    'entities': [],
-                    'content': item['content'],
-                })
-                chunk_index += 1
-            elif item['type'] == 'image':
-                chunk_id = generate_chunk_id(url, chunk_index)
-                chunks.append({
-                    'chunk_id': chunk_id,
-                    'source': url,
-                    'content_type': 'image',
-                    'title': title,
-                    'keywords': ['immagine'],
-                    'questions': [],
-                    'entities': [],
-                    'content': item['content'],
-                })
-                chunk_index += 1
-
-    # Process the top-level content list
-    process_content_list(page_data['content'])
-    return chunks
-
 
 
 async def crawl_and_chunk(sitemap_path: str, base_domain: str):
