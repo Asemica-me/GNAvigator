@@ -106,26 +106,42 @@ async def fetch_and_process_page(client: httpx.AsyncClient, url: str, base_domai
         def extract_text_with_structure(element):
             text_list = []
             current_paragraph = []
+            current_headers_on_path = []
 
-            for child in element.descendants:
-                if isinstance(child, Comment) or child.name == 'table':
-                    continue
-                if isinstance(child, NavigableString):
-                    text = child.strip()
-                    if text:
-                        current_paragraph.append(text)
-                elif child.name in ['h2', 'h3', 'h4', 'h5', 'h6']:
+            def process_element(elem, headers_path):
+                nonlocal current_paragraph
+                if isinstance(elem, Comment) or elem.name == 'table':
+                    return
+                if elem.name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
                     if current_paragraph:
                         text_list.append({'type': 'paragraph', 'content': ' '.join(current_paragraph)})
                         current_paragraph = []
-                    text_list.append({'type': child.name, 'content': child.get_text(strip=True)})
-                elif child.name == 'p':
-                    if current_paragraph:
-                        text_list.append({'type': 'paragraph', 'content': ' '.join(current_paragraph)})
-                        current_paragraph = []
+                    header_text = elem.get_text(strip=True)
+                    if header_text:
+                        new_headers_path = headers_path + [header_text]
+                        text_list.append({'type': elem.name, 'content': header_text, 'headers_context': list(new_headers_path[:-1])}) # Store context before this header
+                    return  # Skip processing children of headers
+                
+                elif elem.name == 'p':
+                    p_text = elem.get_text(strip=True, separator=' ')
+                    if p_text:
+                        text_list.append({'type': 'paragraph', 'content': p_text, 'headers_context': list(headers_path)})
+                    return # Skip processing children of paragraphs
+                
+                # Process other elements
+                for child in elem.contents:
+                    if isinstance(child, NavigableString):
+                        text = child.strip()
+                        if text:
+                            current_paragraph.append(text)
+                    else:
+                        process_element(child, headers_path)
 
+            process_element(element, [])
+
+            # Add any remaining text in the buffer
             if current_paragraph:
-                text_list.append({'type': 'paragraph', 'content': ' '.join(current_paragraph)})
+                text_list.append({'type': 'paragraph', 'content': ' '.join(current_paragraph), 'headers_context': []})
 
             return text_list
 
@@ -176,7 +192,6 @@ async def create_semantic_chunks(page_data: dict, chunk_size: int = 1024, chunk_
     title = page_data['title']
     chunks = []
     chunk_index = 0
-    current_context = []  # Track hierarchical headers for context
 
     def create_text_chunk(text_content, chunk_type="text", headers_context=None):
         nonlocal chunk_index
@@ -211,68 +226,87 @@ async def create_semantic_chunks(page_data: dict, chunk_size: int = 1024, chunk_
         chunk_index += 1
         return chunk
 
-    def process_content_list(content_list, current_headers=None):
-        nonlocal chunk_index, current_context
-        current_headers = current_headers or []
-        buffer = []
-        current_length = 0
-        sentence_lengths = []  # Track lengths of sentences in buffer
-        local_context = list(current_headers) # Capture current header context
+    all_page_chunks = []
+    current_headers = []
 
-        for item in content_list:
-            # Update header context
-            if item['type'].startswith('h'):
-                header_level = int(item['type'][1:])
+    for item in page_data['content']:
+        if item['type'].startswith('h'):
+            header_level = int(item['type'][1:])
+            current_headers = current_headers[:header_level - 1] + [item['content']]
+            # We might want to create a chunk for the header itself with its context
+            all_page_chunks.append({
+                'type': item['type'],
+                'content': item['content'],
+                'headers_context': list(current_headers[:-1]) # Context before this header
+            })
+        elif item['type'] == 'paragraph':
+            all_page_chunks.append({
+                'type': 'paragraph',
+                'content': item['content'],
+                'headers_context': list(current_headers)
+            })
+
+    final_chunks = []
+    buffer = []
+    current_length = 0
+    sentence_lengths = []
+    context_for_buffer = []
+
+    for item in all_page_chunks:
+        if item['type'].startswith('h'):
+            # Create a chunk for the preceding buffer
+            if buffer:
+                chunk_text = " ".join(buffer)
+                final_chunks.append(create_text_chunk(chunk_text, headers_context=list(context_for_buffer)))
+                buffer = []
+                current_length = 0
+                sentence_lengths = []
+                context_for_buffer = [] # Reset context for new buffer
+
+            # Create a chunk for the header
+            final_chunks.append(create_text_chunk(item['content'], headers_context=item['headers_context']))
+            # Update current headers for subsequent content
+            header_level = int(item['type'][1:])
+            if header_level <= len(current_headers):
                 current_headers = current_headers[:header_level - 1] + [item['content']]
-                local_context = list(current_headers) # Update local context immediately
+            else:
+                current_headers.append(item['content'])
+            context_for_buffer = list(current_headers[:-1]) # Context after the header
 
-            if item['type'] in ['paragraph', 'text']:
-                # Process text content with sentence-aware splitting
-                sentences = [sent.text_with_ws for sent in nlp(item['content']).sents]
+        elif item['type'] == 'paragraph':
+            sentences = [sent.text_with_ws for sent in nlp(item['content']).sents]
+            for sentence in sentences:
+                sent_len = len(sentence)
+                if current_length + sent_len > chunk_size and buffer:
+                    # Create a chunk
+                    chunk_text = " ".join(buffer)
+                    final_chunks.append(create_text_chunk(chunk_text, headers_context=list(context_for_buffer)))
 
-                for sentence in sentences:
-                    sent_len = len(sentence)
+                    # Prepare for overlap
+                    overlap_buffer = []
+                    overlap_length = 0
+                    overlap_indices = []
+                    for i in range(len(buffer) - 1, -1, -1):
+                        overlap_length += sentence_lengths[i]
+                        overlap_buffer.insert(0, buffer[i])
+                        overlap_indices.insert(0, i)
+                        if overlap_length > chunk_overlap:
+                            break
+                    buffer = list(overlap_buffer)
+                    sentence_lengths = [sentence_lengths[i] for i in overlap_indices]
+                    current_length = sum(sentence_lengths)
+                    # Keep the current context
+                buffer.append(sentence)
+                sentence_lengths.append(sent_len)
+                current_length += sent_len
+                context_for_buffer = item['headers_context'] # Use the paragraph's header context
 
-                    if current_length + sent_len > chunk_size:
-                        # Create chunk from buffer
-                        if buffer:
-                            chunk_text = " ".join(buffer)
-                            chunks.append(create_text_chunk(
-                                chunk_text,
-                                chunk_type="text",
-                                headers_context=list(local_context) # Use the captured local context
-                            ))
+    # Add any remaining buffer
+    if buffer:
+        chunk_text = " ".join(buffer)
+        final_chunks.append(create_text_chunk(chunk_text, headers_context=list(context_for_buffer)))
 
-                            # Calculate overlap
-                            overlap_total = 0
-                            overlap_index = len(buffer) - 1
-                            while overlap_index >= 0 and overlap_total < chunk_overlap:
-                                overlap_total += sentence_lengths[overlap_index]
-                                overlap_index -= 1
-
-                            overlap_start = max(0, overlap_index + 1)
-                            buffer = buffer[overlap_start:]
-                            sentence_lengths = sentence_lengths[overlap_start:]
-                            current_length = sum(sentence_lengths)
-
-                    buffer.append(sentence)
-                    sentence_lengths.append(sent_len)
-                    current_length += sent_len
-            elif item['type'].startswith('h'):
-                local_context = list(current_headers) # Ensure context is updated after header
-
-        # Add remaining content
-        if buffer:
-            chunk_text = " ".join(buffer)
-            chunks.append(create_text_chunk(
-                chunk_text,
-                chunk_type="text",
-                headers_context=list(local_context) # Use the final local context
-            ))
-
-    # Process the content with header tracking
-    process_content_list(page_data['content'])
-    return chunks
+    return final_chunks
 
 async def extract_keywords_and_entities(text: str):
     """
@@ -325,7 +359,7 @@ async def crawl_and_chunk(sitemap_path: str, base_domain: str):
                         keywords, entities = await extract_keywords_and_entities(chunk['content'])
                         chunk['keywords'] = keywords
                         chunk['entities'] = entities
-                    all_chunks.extend(text_chunks)
+                        all_chunks.append(chunk)
 
                 # Process images
                 for img_data in page_data.get('images', []):
