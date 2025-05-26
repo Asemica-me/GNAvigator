@@ -6,7 +6,7 @@ from urllib.parse import urljoin
 import time
 
 # Global variables
-GLOBAL_SITEMAP_PATH = 'Gna_sitemap.xml'  # Replace with the actual path to your sitemap
+GLOBAL_SITEMAP_PATH = 'Gna_sitemap.xml' 
 GLOBAL_BASE_DOMAIN = 'https://gna.cultura.gov.it'
 
 def get_urls_from_sitemap_file(file_path: str) -> list:
@@ -106,5 +106,5 @@ async def main_crawl():
 
 if __name__ == "__main__":
     crawled_output = asyncio.run(main_crawl())
-    # You can work with the crawled_output here if needed
+
     # print("\nFirst crawled item:", crawled_output[0] if crawled_output else "No items crawled")

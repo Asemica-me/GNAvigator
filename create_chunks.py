@@ -14,6 +14,11 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from huggingface_hub import InferenceClient, login
 from transformers import pipeline
 from tqdm.asyncio import tqdm
+import subprocess
+import tempfile
+from PIL import Image
+from io import BytesIO
+from tesseract import *
 
 # Load the Italian spaCy model
 nlp = spacy.load("it_core_news_lg")
@@ -73,10 +78,21 @@ async def fetch_and_process_page(client: httpx.AsyncClient, url: str, base_domai
 
         content = soup.find('div', {'id': 'mw-content-text'})  # Or the main content div
         if not content:
-            return {'url': url, 'title': "No Title", 'content': ""}
+            return {'url': url, 'title': "No Title", 'content': "", 'images': []}
 
         title_tag = soup.find('h1', id='firstHeading')
         title = title_tag.text if title_tag else "No Title"
+
+        # Extract image URLs
+        images = []
+        for img_tag in content.find_all('img'):
+            if 'src' in img_tag.attrs:
+                img_src = img_tag['src']
+                # Make sure the URL is absolute
+                if not img_src.startswith('http'):
+                    img_src = urljoin(base_domain, img_src)
+                alt_text = img_tag.get('alt', None)
+                images.append({'url': img_src, 'alt': alt_text})
 
         # Recursive function to extract text with HTML structure
         def extract_text_with_structure(element):
@@ -124,6 +140,7 @@ async def fetch_and_process_page(client: httpx.AsyncClient, url: str, base_domai
             'url': url,
             'title': title,
             'content': page_content,  # Hierarchical list of text, tables, and images
+            'images': images
         }
     except httpx.RequestError as e:
         print(f"HTTP request error for {url}: {e}")
@@ -165,7 +182,6 @@ async def create_semantic_chunks(page_data: dict, chunk_size: int = 1024, chunk_
     def create_text_chunk(text_content, chunk_type="text", headers_context=None):
         nonlocal chunk_index
         
-        # Load spaCy doc for entities/other metadata
         doc = nlp(text_content)
         unique_entities = list(set([(ent.text, ent.label_) for ent in doc.ents]))
         
@@ -261,9 +277,6 @@ async def create_semantic_chunks(page_data: dict, chunk_size: int = 1024, chunk_
 
 
 async def crawl_and_chunk(sitemap_path: str, base_domain: str):
-    """
-    Crawls the website and creates semantic chunks with metadata, saving them to a file.
-    """
     urls = get_urls_from_sitemap_file(sitemap_path)
     all_chunks = []
 
@@ -271,11 +284,38 @@ async def crawl_and_chunk(sitemap_path: str, base_domain: str):
         for url in tqdm(urls, desc="Processing URLs", unit="URL"):
             page_data = await fetch_and_process_page(client, url, base_domain)
             if page_data:
-                page_chunks = await create_semantic_chunks(page_data)
-                all_chunks.extend(page_chunks)
-            await asyncio.sleep(1.1)  # Respectful crawling delay
+                # Process text content into chunks
+                text_chunks = await create_semantic_chunks(page_data)
+                all_chunks.extend(text_chunks)
 
-    print(f"Generated a total of {len(all_chunks)} chunks.")
+                # Process images using the extract_text_from_image function
+                for img_data in page_data.get('images', []):
+                    img_url = img_data['url']
+                    alt_text = img_data.get('alt', None)
+                    ocr_text = extract_text_from_image(img_url)
+                    if ocr_text:
+                        chunk_id = generate_chunk_id(img_url, 0)
+                        image_chunk = {
+                            'chunk_id': chunk_id,
+                            'source': img_url,
+                            'content_type': 'image_ocr',
+                            'questions': [],
+                            'title': page_data['title'],
+                            'headers_context': [],
+                            'keywords': [],
+                            'entities': [], 
+                            'content': ocr_text,
+                            'metadata': {
+                                'source_type': 'image',
+                                'alt_text': alt_text,
+                                'image_url': img_url
+                            }
+                        }
+                        all_chunks.append(image_chunk)
+
+            await asyncio.sleep(1.1)
+
+    print(f"Generated a total of {len(all_chunks)} chunks (including image OCR).")
 
     # Save the chunks to a JSON file
     with open(OUTPUT_PATH, "w", encoding='utf-8') as f:
@@ -287,4 +327,3 @@ async def crawl_and_chunk(sitemap_path: str, base_domain: str):
 
 if __name__ == "__main__":
     all_chunks_data = asyncio.run(crawl_and_chunk(SITEMAP_PATH, BASE_DOMAIN))
-    # You can now work with the list of chunk dictionaries
