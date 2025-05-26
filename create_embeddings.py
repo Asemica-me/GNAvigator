@@ -2,6 +2,15 @@ import asyncio
 import httpx
 from httpx import Limits
 
+# api_key = os.getenv("MISTRAL_API_KEY")
+# llm = os.getenv("MODEL")
+# client = Mistral(api_key=api_key)
+
+api_key = os.getenv("HF_TOKEN")
+login(token=api_key)
+llm = "mistralai/Mistral-7B-Instruct-v0.2"
+client = InferenceClient(model=llm, token=api_key)
+
 MISTRAL_REQUESTS_PER_SECOND = 1
 API_RATE_LIMITER_CAPACITY = MISTRAL_REQUESTS_PER_SECOND * 2
 
