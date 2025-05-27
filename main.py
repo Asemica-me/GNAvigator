@@ -4,7 +4,7 @@ import streamlit as st
 import mistralai
 from crawl_kb import *
 from create_chunks import *
-from create_embeddings import *
+from create_embeddings_json import *
 from create_vectorstore import *
 from process_query import *
 

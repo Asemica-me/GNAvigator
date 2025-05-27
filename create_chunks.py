@@ -179,6 +179,7 @@ async def create_semantic_chunks(page_data: dict, chunk_size: int = CHUNK_SIZE, 
     sentence_lengths = []
     context_for_buffer = []
     chunk_index = 0
+    current_headers = []
 
     def create_chunk(text_content, headers_context=None, content_type="text"):
         nonlocal chunk_index
@@ -197,36 +198,16 @@ async def create_semantic_chunks(page_data: dict, chunk_size: int = CHUNK_SIZE, 
         chunk_index += 1
         return chunk
 
-    all_page_segments = []
-    current_headers = []
     for item in page_data['content']:
         if item['type'].startswith('h'):
             header_level = int(item['type'][1:])
             current_headers = current_headers[:header_level - 1] + [item['content']]
-            all_page_segments.append({'type': item['type'], 'content': item['content'], 'headers_context': list(current_headers[:-1])})
         elif item['type'] in ['paragraph', 'text']:
-            all_page_segments.append({'type': 'paragraph', 'content': item['content'], 'headers_context': list(current_headers)})
-
-    for item in all_page_segments:
-        if item['type'].startswith('h'):
-            if buffer:
-                final_chunks.append(create_chunk(" ".join(buffer), headers_context=list(context_for_buffer)))
-                buffer = []
-                current_length = 0
-                sentence_lengths = []
-                context_for_buffer = []
-
-            final_chunks.append(create_chunk(item['content'], headers_context=item['headers_context'], content_type=item['type']))
-            header_level = int(item['type'][1:])
-            current_headers = current_headers[:header_level - 1] + [item['content']]
-            context_for_buffer = list(current_headers[:-1])
-
-        elif item['type'] == 'paragraph':
             sentences = [sent.text_with_ws for sent in nlp(item['content']).sents]
             for sentence in sentences:
                 sent_len = len(sentence)
                 if current_length + sent_len > chunk_size and buffer:
-                    final_chunks.append(create_chunk(" ".join(buffer), headers_context=list(context_for_buffer)))
+                    final_chunks.append(create_chunk(" ".join(buffer), headers_context=list(current_headers)))
                     overlap_buffer = buffer[max(0, len(buffer) - sum([1 for length in reversed(sentence_lengths) if sum(reversed(sentence_lengths[:sentence_lengths.index(length) + 1])) < chunk_overlap])):]
                     buffer = list(overlap_buffer)
                     sentence_lengths = [len(s) for s in buffer]
@@ -235,10 +216,9 @@ async def create_semantic_chunks(page_data: dict, chunk_size: int = CHUNK_SIZE, 
                 buffer.append(sentence)
                 sentence_lengths.append(sent_len)
                 current_length += sent_len
-                context_for_buffer = item['headers_context']
 
     if buffer:
-        final_chunks.append(create_chunk(" ".join(buffer), headers_context=list(context_for_buffer)))
+        final_chunks.append(create_chunk(" ".join(buffer), headers_context=list(current_headers)))
 
     return final_chunks
 

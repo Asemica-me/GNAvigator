@@ -1,7 +1,7 @@
 import os
 import asyncio
 from langchain.document_loaders import Document
-from create_embeddings import *
+from create_embeddings_json import *
 
 async def get_embeddings_in_batches(client, texts: list[str], embedding_model_name: str, batch_size: int = 32): # Check Mistral's recommended batch size
     all_embeddings = []
