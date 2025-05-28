@@ -1,0 +1,27 @@
+message_index,question,answer,rating,timestamp
+15,Come si compila il Modulo di Progetto (MOPR) secondo le linee guida del GNA?,"Per compilare il Modulo di Progetto (MOPR) secondo le linee guida del Geoportale Nazionale Archeologia (GNA), è necessario seguire i seguenti passaggi:
+
+1. Accedere al GNA e selezionare la voce ""Compila MOPR"" dal menu principale.
+2. Inserire i dati richiesti nei campi previsti per il MOPR, seguendo le indicazioni fornite dalle istruzioni operative del GNA [1].
+3. Compilare il campo ""Nome"" con il nome del progetto.
+4. Inserire l'URL del repository del GNA nel campo ""Repository GNA"".
+5. Descrivere dettagliatamente il progetto nel campo ""QDettaglirepository"".
+6. Se si desidera importare i dati del progetto dal GNA, è necessario selezionare l'opzione ""Importazione dei dati MOSI presenti in GNA: necessario che sia presente un solo poligono/multipoligono sulla layer MOPR"" e avviare l'importazione dei dati.
+7. Verificare che tutti i campi siano stati compilati correttamente e inviare il MOPR per la validazione.
+
+Si consiglia di consultare le istruzioni operative del GNA per ulteriori informazioni sulla compilazione del MOPR [1].
+
+[1] Fonte: https://gna.cultura.gov.it/wiki/index.php/Istruzioni_operative",5,2025-05-28 17:17:41
+15,Come si compila il Modulo di Progetto (MOPR) secondo le linee guida del GNA?,"Per compilare il Modulo di Progetto (MOPR) secondo le linee guida del Geoportale Nazionale Archeologia (GNA), è necessario seguire i seguenti passaggi:
+
+1. Accedere al GNA e selezionare la voce ""Compila MOPR"" dal menu principale.
+2. Inserire i dati richiesti nei campi previsti per il MOPR, seguendo le indicazioni fornite dalle istruzioni operative del GNA [1].
+3. Compilare il campo ""Nome"" con il nome del progetto.
+4. Inserire l'URL del repository del GNA nel campo ""Repository GNA"".
+5. Descrivere dettagliatamente il progetto nel campo ""QDettaglirepository"".
+6. Se si desidera importare i dati del progetto dal GNA, è necessario selezionare l'opzione ""Importazione dei dati MOSI presenti in GNA: necessario che sia presente un solo poligono/multipoligono sulla layer MOPR"" e avviare l'importazione dei dati.
+7. Verificare che tutti i campi siano stati compilati correttamente e inviare il MOPR per la validazione.
+
+Si consiglia di consultare le istruzioni operative del GNA per ulteriori informazioni sulla compilazione del MOPR [1].
+
+[1] Fonte: https://gna.cultura.gov.it/wiki/index.php/Istruzioni_operative",5,2025-05-28 17:17:41

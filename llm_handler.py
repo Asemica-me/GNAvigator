@@ -114,32 +114,3 @@ class RAGOrchestrator:
     async def initialize_vector_store(self, sitemap_path: str, base_domain: str):
         """Initialize vector store with documents"""
         await self.vector_db.process_and_store_chunks(sitemap_path, base_domain)
-
-MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
-async def main():
-    if not MISTRAL_API_KEY:
-        print("MISTRAL_API_KEY not found in environment variables. Please set it to run the LLM.")
-        return
-
-    orchestrator = RAGOrchestrator(mistral_api_key=MISTRAL_API_KEY)
-
-    # --- Optional: Initialize the vector store if you haven't already ---
-    # await orchestrator.initialize_vector_store(SITEMAP_PATH, BASE_DOMAIN)
-    # print("Vector store initialized.")
-    # -------------------------------------------------------------------
-
-    question = "Come posso cercare i dati nel Geoportale?"
-    print(f"\nAsking: {question}")
-    response = await orchestrator.query(question=question)
-
-    print("\n--- Response ---")
-    print(f"Answer: {response['answer']}")
-    print("\n--- Context ---")
-    for item in response['context']:
-        print(f"Fonte: {item['source']}")
-        print(f"Contenuto (snippet): {item['content'][:100]}...")
-    print("\n--- Sources ---")
-    print(response['sources'])
-
-if __name__ == "__main__":
-    asyncio.run(main())
