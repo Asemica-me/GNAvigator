@@ -38,7 +38,6 @@ class MistralLLM:
         Segui sempre queste regole:
         Non rispondere a una domanda con un'altra domanda.
         Rispondi **sempre** in italiano, indipendentemente dalla lingua della domanda, a meno che l'utente non richieda esplicitamente un'altra lingua.
-        Sii conciso, preciso e basato sui fatti.
         Cita le fonti utilizzando la notazione [source].
         Se non hai informazioni sufficienti per rispondere, rispondi "Non ho informazioni sufficienti".
 
@@ -63,7 +62,7 @@ class MistralLLM:
         backoff.expo,
         Exception,
         max_tries=3,
-        jitter=backoff.full_jitter  # Fixed jitter parameter
+        jitter=backoff.full_jitter 
     )
     async def generate_async(
         self,
