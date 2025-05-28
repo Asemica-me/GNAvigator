@@ -1,2 +1,5 @@
 message_index,question,answer,rating,timestamp
-5,"Cosa significa il termine ""RCG multipolygon"" nel contesto del manuale operativo?","Il termine ""RCG multipolygon"" si riferisce a un layer del Geoportale Nazionale Archeologia (GNA) utilizzato per perimetrare e censire le aree di ricognizione. Questo layer è multipoligonale, il che significa che accetta l'inserimento di più poligoni, anche non contigui, per un'unica occorrenza. In altre parole, serve a rappresentare su mappa l'Authority File di ricognizione, che è un insieme di dati relativi alle aree sottoposte a ricognizione archeologica [source](https://gna.cultura.gov.it/wiki/index.php/Il_progetto).",3,2025-05-28 17:38:49
+5,ciao,Ciao! Come posso aiutarti oggi?,5,2025-05-28 18:19:30
+7,no,"Mi dispiace, ma non ho informazioni sufficienti per rispondere alla tua domanda. Potresti fornire maggiori dettagli o porre una domanda più specifica?",3,2025-05-28 18:20:02
+9,ok,"Mi dispiace, ma non ho informazioni sufficienti per rispondere alla tua domanda. Potresti fornire maggiori dettagli o porre una domanda specifica?",4,2025-05-28 18:20:27
+11,ciao,Ciao! Come posso aiutarti oggi?,1,2025-05-28 18:25:57
