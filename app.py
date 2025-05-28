@@ -173,7 +173,7 @@ def main():
                         st.download_button(
                             label="Scarica CSV",
                             data=df.to_csv(index=False),
-                            file_name="feedback_full.csv",
+                            file_name="feedbacks_assistenteAI_gna.csv",
                             mime="text/csv"
                         )
                     else:

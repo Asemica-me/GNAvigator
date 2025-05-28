@@ -1,2 +1,3 @@
 message_index,question,answer,rating,timestamp
 1,ciao,Ciao! Come posso aiutarti oggi?,3,2025-05-28 18:29:33
+9,In quali aree verranno implementati i dati del layer VRD_multipolygon?,"Il layer VRD_multipolygon del Geoportale Nazionale Archeologia (GNA) è strettamente connesso con MOPR e specificamente legato alle procedure di archeologia preventiva. Questo layer serve a perimetrare e censire le aree di ricognizione, e accetta l’inserimento di più poligoni, anche non contigui, per un’unica occorrenza. Pertanto, i dati del layer VRD_multipolygon verranno implementati nelle aree interessate dalle lavorazioni preventive, come ad esempio gli scavi archeologici preventivi. [source: https://gna.cultura.gov.it/wiki/index.php/La_struttura_del_progetto]",3,2025-05-28 18:46:36
