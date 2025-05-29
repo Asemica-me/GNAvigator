@@ -1,5 +1,6 @@
 beautifulsoup4
 mistralai
+streamlit
 langchain_community 
 langchain_mistralai
 langchain_huggingface 
@@ -7,7 +8,7 @@ torch
 torchvision 
 torchaudio
 faiss-cpu 
-streamlit
+nest_asyncio
 mwparserfromhell
 transformers 
 accelerate 
