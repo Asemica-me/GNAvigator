@@ -5,6 +5,7 @@ from mistralai import Mistral, SystemMessage, UserMessage
 import backoff
 import logging
 import os
+import re
 from vector_store import *
 
 load_dotenv()
@@ -29,6 +30,7 @@ class MistralLLM:
         self.max_tokens = max_tokens
         self.max_retries = max_retries
         self.semaphore = asyncio.Semaphore(max_concurrency)
+        self.citation_regex = re.compile(r'\[(\d+)\]')  
 
     def _build_rag_prompt(self, question: str, context: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Construct RAG system prompt with context"""
@@ -38,7 +40,9 @@ class MistralLLM:
         Segui sempre queste regole:
         Non rispondere a una domanda con un'altra domanda.
         Rispondi **sempre** in italiano, indipendentemente dalla lingua della domanda, a meno che l'utente non richieda esplicitamente un'altra lingua.
-        Cita le fonti utilizzando la notazione [source].
+        Cita le fonti utilizzando la notazione [numero] dove:
+           - "numero" corrisponde esattamente all'URL della fonte nel contesto;
+           - Usa numeri separati per fonti diverse (es: [1][3]);
         Se non hai informazioni sufficienti per rispondere, rispondi "Non ho informazioni sufficienti".
 
         Le tue risposte devono essere sempre:
@@ -49,13 +53,13 @@ class MistralLLM:
         """
 
         context_str = "\n\n".join(
-            f"Fonte: {item['source']}\nContenuto: {item['content']}"
-            for item in context
+            f"FONTE {idx}: {item['source']}\nCONTENUTO: {item['content']}" 
+            for idx, item in enumerate(context, start=1)
         )
 
         return [
             SystemMessage(content=system_content),
-            UserMessage(content=f"Contesto:\n{context_str}\n\nDomanda: {question}")
+            UserMessage(content=f"CONTESTO:\n{context_str}\n\nDOMANDA: {question}")
         ]
 
     @backoff.on_exception(
@@ -92,6 +96,23 @@ class MistralLLM:
                 logger.error(f"Generation failed: {str(e)}")
                 raise
 
+    def _validate_citations(self, response: str, context_size: int) -> str:
+        """Ensure citations reference valid sources"""
+        citations = set()
+        for match in self.citation_regex.finditer(response):
+            citation = int(match.group(1))
+            if 1 <= citation <= context_size:
+                citations.add(citation)
+            else:
+                logger.warning(f"Invalid citation detected: [{citation}]")
+
+        if not citations:
+            logger.warning("No valid citations found in response")
+            return response + "\n\n[ATTENZIONE: Risposta non citata]"
+            
+        return response
+
+
 class RAGOrchestrator:
     """Orchestrates RAG workflow between vector store and LLM"""
     
@@ -104,11 +125,14 @@ class RAGOrchestrator:
         context = self.vector_db.query(question, top_k=top_k)
         answer = await self.llm.generate_async(question=question, context=context)
         
+        # Map source numbers to URLs
+        source_map = {str(i+1): c["source"] for i, c in enumerate(context)}
+        
         return {
             "question": question,
             "answer": answer,
-            "context": context,
-            "sources": list({c["source"] for c in context})
+            "sources": source_map,
+            "context": context
         }
 
     async def initialize_vector_store(self, sitemap_path: str, base_domain: str):

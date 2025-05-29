@@ -7,6 +7,7 @@ import time
 import pandas as pd
 from pathlib import Path
 import logging
+import re
 
 # Load environment variables
 load_dotenv()
@@ -52,6 +53,17 @@ def save_feedback(feedback_data: dict):
         except Exception as fallback_error:
             logger.critical(f"Fallback logging failed: {fallback_error}")
 
+def format_answer_with_links(answer: str, source_map: dict) -> str:
+    """Convert [number] citations to markdown hyperlinks"""
+    def replace_citation(match):
+        citation_num = match.group(1)
+        if citation_num in source_map:
+            url = source_map[citation_num]
+            return f"[[{citation_num}]({url})]"
+        return match.group(0)  # Return original if not found
+    
+    return re.sub(r'\[(\d+)\]', replace_citation, answer)
+
 # --- Streamlit App ---
 def main():
     st.set_page_config(page_title="Assistente AI GNA", page_icon="🤖")
@@ -87,7 +99,6 @@ def main():
             
             # Add feedback for assistant messages
             if role == "assistant":
-                # Check if feedback already exists
                 feedback_exists = any(fb["message_index"] == i for fb in st.session_state.feedback_data)
                 current_rating = next(
                     (fb["rating"] for fb in st.session_state.feedback_data if fb["message_index"] == i), 
@@ -95,20 +106,21 @@ def main():
                 )
                 
                 if feedback_exists:
-                    st.success(f"✅ Valutazione registrata: {current_rating}/5")
+                    st.success(f"✅ Valutazione registrata: {current_rating}/3")
                 else:
                     st.caption("Valuta questa risposta:")
-                    cols = st.columns(5)
-                    for score in range(1, 6):
+                    cols = st.columns(3)
+                    for score in range(1, 4):
                         if cols[score-1].button(
                             f"⭐{score}", 
                             key=f"feedback_{i}_{score}",
                             use_container_width=True
                         ):
+                            # Use raw answer for feedback
                             feedback = {
                                 "message_index": i,
                                 "question": st.session_state.chat_history[i-1]["content"],
-                                "answer": content,
+                                "answer": message["raw_answer"],  # Use unformatted answer
                                 "rating": score,
                                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
                             }
@@ -130,20 +142,26 @@ def main():
             # Wrap async call in synchronous context
             try:
                 response = asyncio.run(orchestrator.query(question=prompt))
-                answer = response["answer"]
+                source_map = response.get("sources", {})
+                
+                # Format answer with hyperlinks
+                raw_answer = response["answer"]
+                formatted_answer = format_answer_with_links(raw_answer, source_map)
             except Exception as e:
                 logger.error(f"Query failed: {str(e)}")
-                answer = "Si è verificato un errore durante l'elaborazione della richiesta."
+                formatted_answer = "Si è verificato un errore durante l'elaborazione della richiesta."
         
         # Add assistant response to history
         st.session_state.chat_history.append({
-            "role": "assistant", 
-            "content": answer
-        })
+        "role": "assistant", 
+        "content": formatted_answer,
+        "raw_answer": raw_answer,  # Store for feedback
+        "source_map": source_map   # Store for reference
+    })
         
         # Display assistant response immediately
         with st.chat_message("assistant"):
-            st.markdown(answer)
+            st.markdown(formatted_answer, unsafe_allow_html=False)
         
         # Rerun to show feedback buttons
         st.rerun()
@@ -152,7 +170,8 @@ def main():
     with st.sidebar:
         st.header("Informazioni")
         st.markdown("""
-        **Assistente Virtuale per il Geoportale Nazionale Archeologia**  
+        **Assistente AI per il Geoportale Nazionale Archeologia**
+                      
         Risponde a domande basate sulla documentazione ufficiale disponibile su:
         [gna.cultura.gov.it](https://gna.cultura.gov.it/wiki/index.php/Pagina_principale)
         """)
@@ -161,7 +180,7 @@ def main():
             st.subheader("Feedback Raccolti")
             st.write(f"Totale feedback: {len(st.session_state.feedback_data)}")
             avg_rating = sum(fb["rating"] for fb in st.session_state.feedback_data) / len(st.session_state.feedback_data)
-            st.metric("Valutazione Media", f"{avg_rating:.1f}/5")
+            st.metric("Valutazione Media", f"{avg_rating:.1f}/3")
             
             if st.button("Esporta tutti i feedback"):
                 try:
