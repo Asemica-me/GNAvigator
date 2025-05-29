@@ -1,7 +1,8 @@
 import asyncio
 from dotenv import load_dotenv
 import os
-import json
+os.environ["SPACY_WARNING_IGNORE"] = "W008"
+os.environ["NLTK_DATA"] = "/tmp/nlp_data/nltk"
 from create_chunks_dict import *
 from chromadb.config import Settings
 import chromadb

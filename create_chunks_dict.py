@@ -1,4 +1,6 @@
 import os
+os.environ["SPACY_WARNING_IGNORE"] = "W008"
+os.environ["NLTK_DATA"] = "/tmp/nlp_data/nltk"
 from dotenv import load_dotenv
 import pandas as pd
 import asyncio
@@ -8,7 +10,6 @@ import httpx
 from urllib.parse import urljoin
 import hashlib
 import spacy
-import json
 from keybert import KeyBERT
 import nltk
 from nltk.corpus import stopwords
@@ -22,8 +23,15 @@ BASE_DOMAIN = 'https://gna.cultura.gov.it'
 CHUNK_SIZE = 1024
 CHUNK_OVERLAP = 256
 
+try:
+    nlp = spacy.load(os.path.join(os.environ.get("SPACY_DATA_DIR", ""), "it_core_news_lg"))
+except OSError:
+    # Fallback if model not found in custom path
+    import spacy.cli
+    spacy.cli.download("it_core_news_lg")
+    nlp = spacy.load("it_core_news_lg")
+
 # --- Initialize Models and Resources ---
-nlp = spacy.load("it_core_news_lg")
 kw_model = KeyBERT()
 nltk.download('stopwords', quiet=True)
 italian_stopwords = stopwords.words('italian')

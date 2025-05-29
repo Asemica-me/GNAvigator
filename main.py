@@ -1,5 +1,39 @@
 import asyncio
 import streamlit as st
+
+# Set user-writable paths for NLP data
+USER_DATA_DIR = "/tmp/nlp_data"
+os.makedirs(f"{USER_DATA_DIR}/spacy", exist_ok=True)
+os.makedirs(f"{USER_DATA_DIR}/nltk", exist_ok=True)
+
+# Set environment variables
+os.environ["SPACY_DATA_DIR"] = f"{USER_DATA_DIR}/spacy"
+os.environ["NLTK_DATA"] = f"{USER_DATA_DIR}/nltk"
+
+# Install spaCy model to user directory
+if not os.path.exists(f"{USER_DATA_DIR}/spacy/it_core_news_lg"):
+    install_cmd = [
+        sys.executable,
+        "-m", "spacy",
+        "download",
+        "--direct",
+        "it_core_news_lg",
+        "--user"
+    ]
+    try:
+        subprocess.run(install_cmd, check=True)
+        st.success("spaCy model installed")
+    except Exception as e:
+        st.error(f"spaCy install failed: {str(e)}")
+
+# Install NLTK data to user directory
+try:
+    import nltk
+    nltk.download("punkt", download_dir=f"{USER_DATA_DIR}/nltk")
+    nltk.data.path.append(f"{USER_DATA_DIR}/nltk")
+except Exception as e:
+    st.error(f"NLTK setup failed: {str(e)}")
+
 import nest_asyncio
 nest_asyncio.apply()
 from dotenv import load_dotenv
