@@ -1,5 +1,4 @@
 beautifulsoup4
-mwparserfromhell
 mistralai
 streamlit
 pandas
@@ -7,5 +6,7 @@ torch
 torchvision 
 nest_asyncio
 chromadb
-transformers 
-accelerate 
+spacy
+keybert
+nltk
+sentence-transformers
