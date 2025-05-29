@@ -3,8 +3,6 @@ import requests
 import numpy as np
 from PIL import Image
 from io import BytesIO
-import matplotlib.pyplot as plt
-import re
 
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
