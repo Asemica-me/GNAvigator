@@ -1,5 +1,19 @@
-import asyncio
 import streamlit as st
+try:
+    icon = Image.open("data/gna.png")
+    st.set_page_config(
+        page_title="Assistente AI GNA",
+        page_icon=icon
+    )
+except Exception as e:
+    # Fallback if icon loading fails
+    st.set_page_config(
+        page_title="Assistente AI GNA",
+        page_icon="🤖"
+    )
+st.title("Geoportale Nazionale Archeologia - Assistente Virtuale")
+
+import asyncio
 import nest_asyncio
 nest_asyncio.apply()
 from dotenv import load_dotenv
@@ -46,20 +60,6 @@ try:
     nltk.data.path.append(f"{USER_DATA_DIR}/nltk")
 except Exception as e:
     st.error(f"NLTK setup failed: {str(e)}")
-
-try:
-    icon = Image.open("data/gna.png")
-    st.set_page_config(
-        page_title="Assistente AI GNA",
-        page_icon=icon
-    )
-except Exception as e:
-    # Fallback if icon loading fails
-    st.set_page_config(
-        page_title="Assistente AI GNA",
-        page_icon="🤖"
-    )
-st.title("Geoportale Nazionale Archeologia - Assistente Virtuale")
 
 # Install spaCy model and NLTK data
 try:
