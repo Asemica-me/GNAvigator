@@ -66,9 +66,9 @@ st.title("Geoportale Nazionale Archeologia - Assistente Virtuale")
 # Install spaCy model and NLTK data
 try:
     import spacy
-    spacy.load("en_core_web_sm")
+    spacy.load("it_core_news_lg")
 except:
-    subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
+    subprocess.run([sys.executable, "-m", "spacy", "download", "it_core_news_lg"])
     
 try:
     import nltk
