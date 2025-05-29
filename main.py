@@ -1,6 +1,18 @@
-import os
 import asyncio
 import streamlit as st
+import nest_asyncio
+nest_asyncio.apply()
+from dotenv import load_dotenv
+import os
+os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
+import time
+import pandas as pd
+from pathlib import Path
+import logging
+import re
+from PIL import Image 
+import subprocess
+import sys
 
 # Set user-writable paths for NLP data
 USER_DATA_DIR = "/tmp/nlp_data"
@@ -34,21 +46,6 @@ try:
     nltk.data.path.append(f"{USER_DATA_DIR}/nltk")
 except Exception as e:
     st.error(f"NLTK setup failed: {str(e)}")
-
-import nest_asyncio
-nest_asyncio.apply()
-from dotenv import load_dotenv
-import os
-os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
-import time
-import pandas as pd
-from pathlib import Path
-import logging
-import re
-from PIL import Image 
-import subprocess
-import sys
-
 
 try:
     icon = Image.open("data/gna.png")
