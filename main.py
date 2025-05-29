@@ -1,4 +1,6 @@
 import streamlit as st
+from PIL import Image
+
 try:
     icon = Image.open("data/gna.png")
     st.set_page_config(
@@ -6,27 +8,14 @@ try:
         page_icon=icon
     )
 except Exception as e:
-    # Fallback if icon loading fails
     st.set_page_config(
         page_title="Assistente AI GNA",
         page_icon="🤖"
     )
 st.title("Geoportale Nazionale Archeologia - Assistente Virtuale")
 
-import asyncio
-import nest_asyncio
-nest_asyncio.apply()
-from dotenv import load_dotenv
+# --- Critical Dependencies Setup ---
 import os
-os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
-import time
-import pandas as pd
-from pathlib import Path
-import logging
-import re
-from PIL import Image 
-import subprocess
-import sys
 
 # Set user-writable paths for NLP data
 USER_DATA_DIR = "/tmp/nlp_data"
@@ -36,43 +25,62 @@ os.makedirs(f"{USER_DATA_DIR}/nltk", exist_ok=True)
 # Set environment variables
 os.environ["SPACY_DATA_DIR"] = f"{USER_DATA_DIR}/spacy"
 os.environ["NLTK_DATA"] = f"{USER_DATA_DIR}/nltk"
+os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
 
-# Install spaCy model to user directory
-if not os.path.exists(f"{USER_DATA_DIR}/spacy/it_core_news_lg"):
-    install_cmd = [
-        sys.executable,
-        "-m", "spacy",
-        "download",
-        "--direct",
-        "it_core_news_lg",
-        "--user"
-    ]
-    try:
-        subprocess.run(install_cmd, check=True)
-        st.success("spaCy model installed")
-    except Exception as e:
-        st.error(f"spaCy install failed: {str(e)}")
-
-# Install NLTK data to user directory
-try:
-    import nltk
-    nltk.download("punkt", download_dir=f"{USER_DATA_DIR}/nltk")
-    nltk.data.path.append(f"{USER_DATA_DIR}/nltk")
-except Exception as e:
-    st.error(f"NLTK setup failed: {str(e)}")
-
-# Install spaCy model and NLTK data
+# 1. Install spaCy model
 try:
     import spacy
-    spacy.load("it_core_news_lg")
+    nlp = spacy.load("it_core_news_lg")
+    st.success("Modello spaCy caricato")
 except:
-    subprocess.run([sys.executable, "-m", "spacy", "download", "it_core_news_lg"])
+    st.warning("Download modello spaCy italiano (potrebbe richiedere qualche minuto)...")
+    import subprocess
+    import sys
     
+    # Method 1: Try direct download
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "spacy", "download", "it_core_news_lg"],
+            capture_output=True,
+            text=True
+        )
+        if result.returncode == 0:
+            st.success("Modello spaCy installato")
+        else:
+            raise RuntimeError(result.stderr)
+    except:
+        # Fallback: Install from direct URL
+        try:
+            model_url = "https://github.com/explosion/spacy-models/releases/download/it_core_news_lg-3.7.0/it_core_news_lg-3.7.0-py3-none-any.whl"
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--no-cache-dir", model_url],
+                check=True
+            )
+            st.success("Modello spaCy installato tramite URL diretto")
+        except Exception as e:
+            st.error(f"Installazione spaCy fallita: {str(e)}")
+            st.stop()
+
+# 2. Install NLTK data
 try:
     import nltk
-    nltk.data.find("tokenizers/punkt")
-except:
-    subprocess.run([sys.executable, "-m", "nltk.downloader", "punkt"])
+    nltk.download("punkt", download_dir=os.environ["NLTK_DATA"])
+    nltk.data.path.append(os.environ["NLTK_DATA"])
+except Exception as e:
+    st.error(f"Configurazione NLTK fallita: {str(e)}")
+
+import asyncio
+import nest_asyncio
+from dotenv import load_dotenv
+import os
+import pandas as pd
+from pathlib import Path
+import nest_asyncio
+import logging
+import re
+import subprocess
+import sys
+
 
 # Load environment variables
 load_dotenv()
