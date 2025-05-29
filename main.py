@@ -80,6 +80,29 @@ import logging
 import re
 import subprocess
 import sys
+import time
+
+# 3. Install OpenCV if missing
+try:
+
+    st.success("OpenCV loaded")
+except ImportError:
+    st.warning("Installing OpenCV...")
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "opencv-python-headless"],
+            capture_output=True,
+            text=True
+        )
+        if result.returncode == 0:
+            st.success("OpenCV installed successfully")
+            import cv2
+        else:
+            st.error(f"OpenCV install failed: {result.stderr}")
+            st.stop()
+    except Exception as e:
+        st.error(f"OpenCV installation failed: {str(e)}")
+        st.stop()
 
 
 # Load environment variables

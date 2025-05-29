@@ -1,6 +1,5 @@
 import pytesseract
 import requests
-import cv2
 import numpy as np
 from PIL import Image
 from io import BytesIO
@@ -11,6 +10,10 @@ pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tessera
 
 def preprocess_image(img, scale_factor=2.5):
     """General preprocessing for varied images"""
+    try:
+        import cv2
+    except ImportError:
+        raise RuntimeError("OpenCV is required for image processing")
     cv_img = np.array(img.convert('L'))
     scaled = cv2.resize(cv_img, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_CUBIC)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
