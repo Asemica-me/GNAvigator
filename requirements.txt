@@ -1,9 +1,7 @@
 beautifulsoup4
 mistralai
 streamlit
-langchain_community 
-langchain_mistralai
-langchain_huggingface 
+pandas
 torch 
 torchvision 
 torchaudio
