@@ -1,15 +1,11 @@
 beautifulsoup4
+mwparserfromhell
 mistralai
 streamlit
 pandas
 torch 
 torchvision 
-torchaudio
-faiss-cpu 
 nest_asyncio
-mwparserfromhell
+chromadb
 transformers 
 accelerate 
-torch
-bitsandbytes
-llama-cpp-python
