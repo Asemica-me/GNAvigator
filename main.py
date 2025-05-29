@@ -11,6 +11,8 @@ from pathlib import Path
 import logging
 import re
 from PIL import Image 
+import subprocess
+import sys
 
 
 try:
@@ -26,6 +28,19 @@ except Exception as e:
         page_icon="🤖"
     )
 st.title("Geoportale Nazionale Archeologia - Assistente Virtuale")
+
+# Install spaCy model and NLTK data
+try:
+    import spacy
+    spacy.load("en_core_web_sm")
+except:
+    subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
+    
+try:
+    import nltk
+    nltk.data.find("tokenizers/punkt")
+except:
+    subprocess.run([sys.executable, "-m", "nltk.downloader", "punkt"])
 
 # Load environment variables
 load_dotenv()
