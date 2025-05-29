@@ -1,5 +1,7 @@
 import asyncio
 import streamlit as st
+import nest_asyncio
+nest_asyncio.apply()
 from dotenv import load_dotenv
 import os
 os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
@@ -8,6 +10,22 @@ import pandas as pd
 from pathlib import Path
 import logging
 import re
+from PIL import Image 
+
+
+try:
+    icon = Image.open("data/gna.png")
+    st.set_page_config(
+        page_title="Assistente AI GNA",
+        page_icon=icon
+    )
+except Exception as e:
+    # Fallback if icon loading fails
+    st.set_page_config(
+        page_title="Assistente AI GNA",
+        page_icon="🤖"
+    )
+st.title("Geoportale Nazionale Archeologia - Assistente Virtuale")
 
 # Load environment variables
 load_dotenv()
@@ -59,15 +77,13 @@ def format_answer_with_links(answer: str, source_map: dict) -> str:
         citation_num = match.group(1)
         if citation_num in source_map:
             url = source_map[citation_num]
-            return f"[[{citation_num}]({url})]"
+            return f"[[{[citation_num]}]({url})]"
         return match.group(0)  # Return original if not found
     
     return re.sub(r'\[(\d+)\]', replace_citation, answer)
 
 # --- Streamlit App ---
 def main():
-    st.set_page_config(page_title="Assistente AI GNA", page_icon="🤖")
-    st.title("Geoportale Nazionale Archeologia - Assistente Virtuale")
     
     # Initialize RAG system - Delayed import to avoid PyTorch conflict
     if "orchestrator" not in st.session_state:
@@ -166,15 +182,22 @@ def main():
         # Rerun to show feedback buttons
         st.rerun()
     
+
+    st.sidebar.image("data/gna.png", width=60)
     # Sidebar for additional info
     with st.sidebar:
         st.header("Informazioni")
-        st.markdown("""
-        **Assistente AI per il Geoportale Nazionale Archeologia**
-                      
-        Risponde a domande basate sulla documentazione ufficiale disponibile su:
-        [gna.cultura.gov.it](https://gna.cultura.gov.it/wiki/index.php/Pagina_principale)
+        st.markdown(f"""
+    **Assistente AI per il Geoportale Nazionale Archeologia**
+    
+    Questo assistente virtuale utilizza tecnologie di Intelligenza Artificiale per rispondere a domande relative al Geoportale Nazionale Archeologia (GNA).
+    
+    Il modello è stato addestrato sul manuale operativo e sulla documentazione ufficiale del progetto, gestito dall'Istituto Centrale per il Catalogo e la Documentazione (ICCD) e disponibile a questo indirizzo:
         """)
+        st.markdown(f"""
+    [gna.cultura.gov.it](https://gna.cultura.gov.it/wiki/index.php/Pagina_principale)""", unsafe_allow_html=True)
+        
+        st.divider()
         
         if st.session_state.feedback_data:
             st.subheader("Feedback Raccolti")
