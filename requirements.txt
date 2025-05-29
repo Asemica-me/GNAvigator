@@ -16,3 +16,4 @@ pytesseract
 pillow
 opencv-python-headless
 requests
+matplotlib
