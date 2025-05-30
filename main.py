@@ -17,6 +17,7 @@ st.title("Geoportale Nazionale Archeologia - Assistente Virtuale")
 # --- Critical Dependencies Setup ---
 import os
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+os.environ['CHROMA_DB_IMPL'] = 'duckdb+parquet'
 
 # Set user-writable paths for NLP data
 USER_DATA_DIR = "/tmp/nlp_data"
@@ -73,7 +74,6 @@ except Exception as e:
 import asyncio
 import nest_asyncio
 from dotenv import load_dotenv
-import os
 import pandas as pd
 from pathlib import Path
 import nest_asyncio
@@ -81,6 +81,8 @@ import logging
 import re
 import subprocess
 import sys
+__import__('pysqlite3')
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 import time
 
 # 3. Install OpenCV if missing
