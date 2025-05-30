@@ -1,48 +1,35 @@
 import asyncio
-from dotenv import load_dotenv
 import os
+import shutil
+import pickle
+import numpy as np
+import faiss
+from dotenv import load_dotenv
+from sentence_transformers import SentenceTransformer
+from create_chunks_dict import *
+
 os.environ["SPACY_WARNING_IGNORE"] = "W008"
 os.environ["NLTK_DATA"] = "/tmp/nlp_data/nltk"
-from create_chunks_dict import *
-from chromadb.config import Settings
-import chromadb
-from sentence_transformers import SentenceTransformer
-from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
-import shutil
 
-
-EMBEDDING_MODEL = SentenceTransformerEmbeddingFunction(model_name="intfloat/multilingual-e5-large")
-CHROMA_DIR = ".chroma_db"
-COLLECTION_NAME = "gna_docs"
+EMBEDDING_MODEL = "intfloat/multilingual-e5-large"
+FAISS_DIR = ".faiss_db"
+FAISS_INDEX_PATH = os.path.join(FAISS_DIR, "index.faiss")
+METADATA_PATH = os.path.join(FAISS_DIR, "metadata.pkl")
 
 class VectorDatabaseManager:
     def __init__(self):
-        # Initialize persistent client
-        self.client = chromadb.PersistentClient(path=CHROMA_DIR)
-
-        # Get or create the collection
-        try:
-            self.collection = self.client.get_or_create_collection(
-                name=COLLECTION_NAME,
-                embedding_function=EMBEDDING_MODEL,
-                metadata={"hnsw:space": "cosine"} # Hierarchical Navigable Small Worlds (HNSW)
-            )
-        except ValueError as e:
-            if "Embedding function name mismatch" in str(e):
-                print("Embedding function mismatch detected. Deleting and recreating the collection...")
-                # Remove the ChromaDB directory
-                if os.path.exists(CHROMA_DIR):
-                    shutil.rmtree(CHROMA_DIR)
-                # Re-initialize the client and collection
-                self.client = chromadb.PersistentClient(path=CHROMA_DIR)
-                self.collection = self.client.get_or_create_collection(
-                    name=COLLECTION_NAME,
-                    embedding_function=EMBEDDING_MODEL,
-                    metadata={"hnsw:space": "cosine"}
-                )
-                print("Collection recreated with the correct embedding function.")
-            else:
-                raise
+        self.embedding_model = SentenceTransformer(EMBEDDING_MODEL)
+        
+        # Load existing database if available
+        if os.path.exists(FAISS_INDEX_PATH) and os.path.exists(METADATA_PATH):
+            self.index = faiss.read_index(FAISS_INDEX_PATH)
+            with open(METADATA_PATH, 'rb') as f:
+                self.metadata_db = pickle.load(f)
+        else:
+            self.index = None
+            self.metadata_db = []
+            # Create storage directory if needed
+            os.makedirs(FAISS_DIR, exist_ok=True)
 
     def _format_chunk(self, chunk: dict) -> tuple:
         """Helper method to format chunk data for storage"""
@@ -61,77 +48,107 @@ class VectorDatabaseManager:
 
     async def process_and_store_chunks(self, sitemap_path: str, base_domain: str):
         """Main processing pipeline"""
-        # Generate chunks using existing crawler
         chunks = await crawl_and_chunk(sitemap_path, base_domain)
-        #print(f"\nNumber of chunks received: {len(chunks)}")
-
+        
         # Process chunks for storage
         ids, documents, metadatas = [], [], []
-
         for chunk_id, chunk in chunks.items():
             formatted_id, text_content, metadata = self._format_chunk(chunk)
             ids.append(formatted_id)
             documents.append(text_content)
             metadatas.append(metadata)
-
-        # don't explicitly generate embeddings here, ChromaDB will do it using the embedding function
-        self.collection.add(
-            ids=ids,
-            documents=documents,
-            metadatas=metadatas
+        
+        # Generate embeddings in batches
+        embeddings = self.embedding_model.encode(
+            documents, 
+            batch_size=32,
+            show_progress_bar=True,
+            convert_to_numpy=True,
+            normalize_embeddings=True
         )
+        
+        # Create or update FAISS index
+        if self.index is None:
+            # Initialize new index
+            dimension = embeddings.shape[1]
+            self.index = faiss.IndexFlatIP(dimension)  # Inner product for cosine similarity
+            self.index.add(embeddings)
+            
+            # Create metadata database
+            self.metadata_db = [
+                {"id": i, "document": doc, "metadata": meta} 
+                for i, doc, meta in zip(ids, documents, metadatas)
+            ]
+        else:
+            # Add to existing index (not efficient for large updates)
+            self.index.add(embeddings)
+            for i, doc, meta in zip(ids, documents, metadatas):
+                self.metadata_db.append({
+                    "id": i, 
+                    "document": doc, 
+                    "metadata": meta
+                })
+        
+        # Persist to disk
+        self._save_to_disk()
+        print(f"FAISS database stored in: {os.path.abspath(FAISS_DIR)}")
 
-        print(f"Database stored in: {os.path.abspath(CHROMA_DIR)}")
-        #print(f"Total chunks stored: {self.collection.count()}")
+    def _save_to_disk(self):
+        """Save index and metadata to disk"""
+        faiss.write_index(self.index, FAISS_INDEX_PATH)
+        with open(METADATA_PATH, 'wb') as f:
+            pickle.dump(self.metadata_db, f)
 
     def query(self, question: str, top_k: int = 5) -> list:
         """Perform similarity search"""
-        # We don't need to encode the query ourselves, ChromaDB will use the embedding function
-        results = self.collection.query(
-            query_texts=[question],
-            n_results=top_k,
-            include=["documents", "metadatas", "distances"]
+        # Generate query embedding
+        query_embedding = self.embedding_model.encode(
+            [question], 
+            convert_to_numpy=True,
+            normalize_embeddings=True
         )
-        #print(f"\nQuery results from ChromaDB: {results}")
-        return self._format_results(results)
-
-    def _format_results(self, raw_results: dict) -> list:
-        """Format ChromaDB results for display"""
-        formatted_results = []
-        if raw_results and 'documents' in raw_results and raw_results['documents'] and raw_results['metadatas'] and raw_results['distances']:
-            for doc, meta, distance in zip(
-                raw_results["documents"][0],
-                raw_results["metadatas"][0],
-                raw_results["distances"][0]
-            ):
-                formatted_results.append({
-                    "score": 1 - distance if distance is not None else None,
-                    "title": meta["title"] if meta and "title" in meta else None,
-                    "source": meta["source"] if meta and "source" in meta else None,
-                    "content": doc[:200] + "..." if doc else None
-                })
-        return formatted_results
+        
+        # Search FAISS index
+        scores, indices = self.index.search(query_embedding, top_k)
+        
+        # Format results
+        results = []
+        for i, score in zip(indices[0], scores[0]):
+            if i < 0:  # FAISS returns -1 for invalid indices
+                continue
+            item = self.metadata_db[i]
+            results.append({
+                "score": float(score),
+                "title": item["metadata"]["title"],
+                "source": item["metadata"]["source"],
+                "content": item["document"][:200] + "..."
+            })
+        
+        return results
 
 async def main():
     # Initialize vector database manager
     db_manager = VectorDatabaseManager()
 
-    # Process and store chunks
-    await db_manager.process_and_store_chunks(SITEMAP_PATH, BASE_DOMAIN)
+    # Process and store chunks only if no existing database
+    if not db_manager.metadata_db:
+        await db_manager.process_and_store_chunks(SITEMAP_PATH, BASE_DOMAIN)
+    else:
+        print("Using existing FAISS database")
 
-    # # Example query
-    # results = db_manager.query(
-    #     "Esempi di implementazione pratica durante la fase iniziale"
-    # )
+    # Example query
+    results = db_manager.query(
+        "Esempi di implementazione pratica durante la fase iniziale"
+    )
 
-    # # Display results
-    # print("\nTop results:")
-    # for i, result in enumerate(results, 1):
-    #     print(f"\nResult {i}:")
-    #     print(f"Title: {result.get('title')}")
-    #     print(f"Source: {result.get('source')}")
-    #     print(f"Relevance: {result.get('score'):.2%}" if result.get('score') is not None else "N/A")
-    #     print(f"Content: {result.get('content')}")
+    # Display results
+    print("\nTop results:")
+    for i, result in enumerate(results, 1):
+        print(f"\nResult {i}:")
+        print(f"Title: {result.get('title')}")
+        print(f"Source: {result.get('source')}")
+        print(f"Relevance: {result.get('score'):.2%}" if result.get('score') is not None else "N/A")
+        print(f"Content: {result.get('content')}")
 
 if __name__ == "__main__":
     asyncio.run(main())
