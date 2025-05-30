@@ -6,6 +6,7 @@ torch
 torchvision 
 nest_asyncio
 chromadb
+pysqlite3-binary
 spacy
 keybert
 nltk
