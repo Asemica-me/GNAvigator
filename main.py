@@ -29,7 +29,6 @@ os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
 try:
     import spacy
     nlp = spacy.load("it_core_news_md")
-    st.success("Modello spaCy caricato")
 except:
     st.warning("Download modello spaCy italiano (potrebbe richiedere qualche minuto)...")
     import subprocess
@@ -81,8 +80,7 @@ import time
 
 # 3. Install OpenCV if missing
 try:
-
-    st.success("OpenCV loaded")
+    import cv2
 except ImportError:
     st.warning("Installing OpenCV...")
     try:
