@@ -6,6 +6,7 @@ torch
 torchvision 
 nest_asyncio
 spacy
+https://github.com/explosion/spacy-models/releases/download/it_core_news_md-3.8.0/it_core_news_md-3.8.0-py3-none-any.whl
 keybert
 nltk
 python-dotenv
@@ -14,4 +15,4 @@ pytesseract
 pillow
 opencv-python-headless
 requests
-https://github.com/explosion/spacy-models/releases/download/it_core_news_md-3.8.0/it_core_news_md-3.8.0-py3-none-any.whl
+backoff
