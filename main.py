@@ -21,6 +21,7 @@ os.makedirs(f"{USER_DATA_DIR}/spacy", exist_ok=True)
 os.makedirs(f"{USER_DATA_DIR}/nltk", exist_ok=True)
 
 # Set environment variables
+os.environ["CUDA_VISIBLE_DEVICES"] = "" # Disable GPU for compatibility w streamlit
 os.environ["SPACY_DATA_DIR"] = f"{USER_DATA_DIR}/spacy"
 os.environ["NLTK_DATA"] = f"{USER_DATA_DIR}/nltk"
 os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"

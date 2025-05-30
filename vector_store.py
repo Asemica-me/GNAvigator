@@ -7,6 +7,7 @@ import faiss
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 from create_chunks_dict import *
+import torch
 
 os.environ["SPACY_WARNING_IGNORE"] = "W008"
 os.environ["NLTK_DATA"] = "/tmp/nlp_data/nltk"
@@ -15,10 +16,12 @@ EMBEDDING_MODEL = "intfloat/multilingual-e5-large"
 FAISS_DIR = ".faiss_db"
 FAISS_INDEX_PATH = os.path.join(FAISS_DIR, "index.faiss")
 METADATA_PATH = os.path.join(FAISS_DIR, "metadata.pkl")
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 class VectorDatabaseManager:
     def __init__(self):
         self.embedding_model = SentenceTransformer(EMBEDDING_MODEL)
+        self.embedding_model = self.embedding_model.to('cpu')
         
         # Load existing database if available
         if os.path.exists(FAISS_INDEX_PATH) and os.path.exists(METADATA_PATH):
