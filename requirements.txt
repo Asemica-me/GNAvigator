@@ -16,3 +16,4 @@ pytesseract
 pillow
 opencv-python-headless
 requests
+protobuf==3.20.3
