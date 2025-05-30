@@ -151,7 +151,7 @@ def format_answer_with_links(answer: str, source_map: dict) -> str:
         citation_num = match.group(1)
         if citation_num in source_map:
             url = source_map[citation_num]
-            return f"[{[citation_num]}({url})]"
+            return f"{[citation_num]}({url})"
         return match.group(0)  # Return original if not found
     
     return re.sub(r'\[(\d+)\]', replace_citation, answer)
