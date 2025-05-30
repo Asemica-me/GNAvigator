@@ -24,12 +24,12 @@ CHUNK_SIZE = 1024
 CHUNK_OVERLAP = 256
 
 try:
-    nlp = spacy.load(os.path.join(os.environ.get("SPACY_DATA_DIR", ""), "it_core_news_lg"))
+    nlp = spacy.load(os.path.join(os.environ.get("SPACY_DATA_DIR", ""), "it_core_news_md"))
 except OSError:
     # Fallback if model not found in custom path
     import spacy.cli
-    spacy.cli.download("it_core_news_lg")
-    nlp = spacy.load("it_core_news_lg")
+    spacy.cli.download("it_core_news_md")
+    nlp = spacy.load("it_core_news_md")
 
 # --- Initialize Models and Resources ---
 kw_model = KeyBERT()
