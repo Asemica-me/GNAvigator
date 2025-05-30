@@ -16,3 +16,4 @@ pillow
 opencv-python-headless
 requests
 backoff
+faiss-cpu
