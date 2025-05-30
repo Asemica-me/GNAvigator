@@ -16,6 +16,7 @@ st.title("Geoportale Nazionale Archeologia - Assistente Virtuale")
 
 # --- Critical Dependencies Setup ---
 import os
+os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 
 # Set user-writable paths for NLP data
 USER_DATA_DIR = "/tmp/nlp_data"
