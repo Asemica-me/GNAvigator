@@ -30,7 +30,7 @@ os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
 # 1. Install spaCy model
 try:
     import spacy
-    nlp = spacy.load("it_core_news_lg")
+    nlp = spacy.load("it_core_news_md")
     st.success("Modello spaCy caricato")
 except:
     st.warning("Download modello spaCy italiano (potrebbe richiedere qualche minuto)...")
@@ -40,7 +40,7 @@ except:
     # Method 1: Try direct download
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "spacy", "download", "it_core_news_lg"],
+            [sys.executable, "-m", "spacy", "download", "it_core_news_md"],
             capture_output=True,
             text=True
         )
@@ -51,7 +51,7 @@ except:
     except:
         # Fallback: Install from direct URL
         try:
-            model_url = "https://github.com/explosion/spacy-models/releases/download/it_core_news_lg-3.7.0/it_core_news_lg-3.7.0-py3-none-any.whl"
+            model_url = "https://github.com/explosion/spacy-models/releases/download/it_core_news_md-3.8.0/it_core_news_md-3.8.0-py3-none-any.whl"
             subprocess.run(
                 [sys.executable, "-m", "pip", "install", "--no-cache-dir", model_url],
                 check=True
