@@ -1,127 +1,138 @@
 import streamlit as st
 from PIL import Image
+import os
+import time
+import logging
+import gc
 
+# --- Critical Dependencies Setup ---
+# Create directories first (runs once per session)
+USER_DATA_DIR = "/tmp/nlp_data"
+os.makedirs(f"{USER_DATA_DIR}/spacy", exist_ok=True)
+os.makedirs(f"{USER_DATA_DIR}/nltk", exist_ok=True)
+
+# Set environment variables (persistent for session)
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
+os.environ.setdefault("SPACY_DATA_DIR", f"{USER_DATA_DIR}/spacy")
+os.environ.setdefault("NLTK_DATA", f"{USER_DATA_DIR}/nltk")
+os.environ.setdefault("STREAMLIT_SERVER_FILE_WATCHER_TYPE", "none")
+
+# Configure page
 try:
     icon = Image.open("data/gna.png")
     st.set_page_config(
         page_title="Assistente AI GNA",
         page_icon=icon
     )
-except Exception as e:
+except Exception:
     st.set_page_config(
         page_title="Assistente AI GNA",
         page_icon="🤖"
     )
 st.title("Geoportale Nazionale Archeologia - Assistente Virtuale")
 
-# --- Critical Dependencies Setup ---
-import os
-USER_DATA_DIR = "/tmp/nlp_data"
-os.makedirs(f"{USER_DATA_DIR}/spacy", exist_ok=True)
-os.makedirs(f"{USER_DATA_DIR}/nltk", exist_ok=True)
-
-# Set environment variables
-os.environ["CUDA_VISIBLE_DEVICES"] = "" # Disable GPU for compatibility w streamlit
-os.environ["SPACY_DATA_DIR"] = f"{USER_DATA_DIR}/spacy"
-os.environ["NLTK_DATA"] = f"{USER_DATA_DIR}/nltk"
-os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
-
-# 1. Install spaCy model
-try:
+# --- Cached Resource Loaders ---
+@st.cache_resource(show_spinner=False)
+def load_spacy_model():
+    """Load spaCy model with caching and download if missing"""
     import spacy
-    nlp = spacy.load("it_core_news_md")
-except:
-    st.warning("Download modello spaCy italiano (potrebbe richiedere qualche minuto)...")
-    import subprocess
-    import sys
-    
-    # Method 1: Try direct download
     try:
-        result = subprocess.run(
-            [sys.executable, "-m", "spacy", "download", "it_core_news_md"],
-            capture_output=True,
-            text=True
-        )
-        if result.returncode == 0:
-            st.success("Modello spaCy installato")
-        else:
-            raise RuntimeError(result.stderr)
-    except:
-        # Fallback: Install from direct URL
+        return spacy.load("it_core_news_md")
+    except OSError:
+        st.warning("Download modello spaCy italiano...")
+        import subprocess
+        import sys
+        
+        # Try direct download
         try:
-            model_url = "https://github.com/explosion/spacy-models/releases/download/it_core_news_md-3.8.0/it_core_news_md-3.8.0-py3-none-any.whl"
+            result = subprocess.run(
+                [sys.executable, "-m", "spacy", "download", "it_core_news_md"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                return spacy.load("it_core_news_md")
+            raise RuntimeError(result.stderr)
+        except Exception:
+            # Fallback to direct URL
+            try:
+                model_url = "https://github.com/explosion/spacy-models/releases/download/it_core_news_md-3.8.0/it_core_news_md-3.8.0-py3-none-any.whl"
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "--no-cache-dir", model_url],
+                    check=True
+                )
+                return spacy.load("it_core_news_md")
+            except Exception as e:
+                st.error(f"Installazione spaCy fallita: {str(e)}")
+                st.stop()
+
+@st.cache_resource(show_spinner=False)
+def load_nltk_data():
+    """Download required NLTK data"""
+    import nltk
+    try:
+        nltk.download("punkt", download_dir=os.environ["NLTK_DATA"])
+        nltk.data.path.append(os.environ["NLTK_DATA"])
+    except Exception as e:
+        st.error(f"Configurazione NLTK fallita: {str(e)}")
+
+@st.cache_resource(show_spinner=False)
+def load_opencv():
+    """Install OpenCV if missing"""
+    try:
+        import cv2
+        return cv2
+    except ImportError:
+        st.warning("Installing OpenCV...")
+        import subprocess
+        import sys
+        try:
             subprocess.run(
-                [sys.executable, "-m", "pip", "install", "--no-cache-dir", model_url],
+                [sys.executable, "-m", "pip", "install", "opencv-python-headless"],
                 check=True
             )
-            st.success("Modello spaCy installato tramite URL diretto")
-        except Exception as e:
-            st.error(f"Installazione spaCy fallita: {str(e)}")
-            st.stop()
-
-# 2. Install NLTK data
-try:
-    import nltk
-    nltk.download("punkt", download_dir=os.environ["NLTK_DATA"])
-    nltk.data.path.append(os.environ["NLTK_DATA"])
-except Exception as e:
-    st.error(f"Configurazione NLTK fallita: {str(e)}")
-
-import asyncio
-import nest_asyncio
-from dotenv import load_dotenv
-import pandas as pd
-from pathlib import Path
-import nest_asyncio
-import logging
-import re
-import subprocess
-import sys
-import time
-
-# 3. Install OpenCV if missing
-try:
-    import cv2
-except ImportError:
-    st.warning("Installing OpenCV...")
-    try:
-        result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "opencv-python-headless"],
-            capture_output=True,
-            text=True
-        )
-        if result.returncode == 0:
-            st.success("OpenCV installed successfully")
             import cv2
-        else:
-            st.error(f"OpenCV install failed: {result.stderr}")
+            return cv2
+        except Exception as e:
+            st.error(f"OpenCV install failed: {str(e)}")
             st.stop()
-    except Exception as e:
-        st.error(f"OpenCV installation failed: {str(e)}")
-        st.stop()
 
+# Initialize NLP resources
+try:
+    nlp = load_spacy_model()
+    load_nltk_data()
+    cv2 = load_opencv()
+except Exception as e:
+    st.error(f"Initialization failed: {str(e)}")
+    st.stop()
 
-# Load environment variables
+# --- Main Application ---
+from dotenv import load_dotenv
 load_dotenv()
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
-logger = logging.getLogger(__name__)
+
+def format_answer_with_links(answer: str, source_map: dict) -> str:
+    """Convert [number] citations to markdown hyperlinks"""
+    def replace_citation(match):
+        citation_num = match.group(1)
+        if citation_num in source_map:
+            url = source_map[citation_num]
+            return f"[[{citation_num}]]({url})"
+        return match.group(0)
+    return re.sub(r'\[\'?(\d+)\'?\]', replace_citation, answer)
 
 # --- Feedback Handling ---
 def save_feedback(feedback_data: dict):
-    """Save feedback to CSV file in feedback directory"""
+    """Save feedback to CSV file"""
     try:
-        # Create feedback directory with absolute path
+        import pandas as pd
+        from pathlib import Path
+        logger = logging.getLogger(__name__)
+        
         feedback_dir = Path(__file__).parent / "feedback"
-        logger.info(f"Creating feedback directory at: {feedback_dir.absolute()}")
-        
-        # Create directory (with parents) if it doesn't exist
         feedback_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Set CSV path
         csv_path = feedback_dir / "feedbacks.csv"
-        logger.info(f"Saving feedback to: {csv_path}")
         
-        # Create DataFrame and save to CSV
         df = pd.DataFrame([feedback_data])
         header = not csv_path.exists()
         
@@ -132,170 +143,153 @@ def save_feedback(feedback_data: dict):
             index=False,
             encoding="utf-8"
         )
-        logger.info(f"Feedback saved successfully: {feedback_data}")
-        
     except Exception as e:
-        logger.error(f"Failed to save feedback: {str(e)}", exc_info=True)
-        # Attempt to log error to file in current directory as fallback
-        try:
-            error_path = Path("feedback_errors.log")
-            with error_path.open("a", encoding="utf-8") as f:
-                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - ERROR: {e}\n")
-                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - DATA: {feedback_data}\n")
-        except Exception as fallback_error:
-            logger.critical(f"Fallback logging failed: {fallback_error}")
+        logger.error(f"Failed to save feedback: {str(e)}")
 
-def format_answer_with_links(answer: str, source_map: dict) -> str:
-    """Convert [number] citations to markdown hyperlinks"""
-    def replace_citation(match):
-        citation_num = match.group(1)
-        if citation_num in source_map:
-            url = source_map[citation_num]
-            return f"[[{citation_num}]]({url})"
-        return match.group(0)  # Return original if not found
-    # Use regex to find all citations in the format [number] or ['number'] and replace them with markdown links
-    return re.sub(r'\[\'?(\d+)\'?\]', replace_citation, answer)
-
-# --- Streamlit App ---
+# --- Main Function with Memory Optimizations ---
 def main():
+    import logging
+    MAX_HISTORY = 10  # Limit chat history entries
+    GC_INTERVAL = 3  # Garbage collection interval in interactions
     
-    # Initialize RAG system - Delayed import to avoid PyTorch conflict
-    if "orchestrator" not in st.session_state:
+    # Initialize orchestrator with caching
+    @st.cache_resource(show_spinner="Caricamento del modello...")
+    def get_orchestrator():
         if not MISTRAL_API_KEY:
-            st.error("MISTRAL_API_KEY non trovata. Impostare la variabile d'ambiente.")
+            st.error("MISTRAL_API_KEY mancante!")
             st.stop()
-        
-        # Import ONLY when needed
-        with st.spinner("Caricamento del modello..."):
-            from llm_handler import RAGOrchestrator
-            st.session_state.orchestrator = RAGOrchestrator(mistral_api_key=MISTRAL_API_KEY)
+        from llm_handler import RAGOrchestrator
+        return RAGOrchestrator(mistral_api_key=MISTRAL_API_KEY)
     
-    orchestrator = st.session_state.orchestrator
+    
+    orchestrator = get_orchestrator()
 
-    # Initialize session state
+    if "last_cleanup" not in st.session_state:
+        st.session_state.last_cleanup = time.time()
+
+    # Clear every 10 minutes
+    if time.time() - st.session_state.last_cleanup > 600:
+        orchestrator.clear_cache()
+        st.session_state.last_cleanup = time.time()
+
+    # Initialize session state with size limits
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
+        st.session_state.interaction_count = 0
     
-    if "feedback_data" not in st.session_state:
-        st.session_state.feedback_data = []
+    # Feedback tracking - store only minimal data
+    if "feedback_given" not in st.session_state:
+        st.session_state.feedback_given = set()
 
-    # Display chat history
-    for i, message in enumerate(st.session_state.chat_history):
-        role = message["role"]
-        content = message["content"]
+    # Display chat history with truncation
+    for i, message in enumerate(st.session_state.chat_history[-MAX_HISTORY:]):
+        idx_offset = max(0, len(st.session_state.chat_history) - MAX_HISTORY)
+        adjusted_idx = i + idx_offset
         
-        with st.chat_message(role):
-            st.markdown(content)
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
             
-            # Add feedback for assistant messages
-            if role == "assistant":
-                feedback_exists = any(fb["message_index"] == i for fb in st.session_state.feedback_data)
-                current_rating = next(
-                    (fb["rating"] for fb in st.session_state.feedback_data if fb["message_index"] == i), 
-                    None
-                )
-                
-                if feedback_exists:
-                    st.success(f"✅ Valutazione registrata: {current_rating}/3")
+            # Feedback only for assistant messages
+            if message["role"] == "assistant":
+                if adjusted_idx in st.session_state.feedback_given:
+                    st.success("✅ Valutazione registrata")
                 else:
                     st.caption("Valuta questa risposta:")
                     cols = st.columns(3)
                     for score in range(1, 4):
                         if cols[score-1].button(
                             f"⭐{score}", 
-                            key=f"feedback_{i}_{score}",
+                            key=f"feedback_{adjusted_idx}_{score}",
                             use_container_width=True
                         ):
-                            # Use raw answer for feedback
                             feedback = {
-                                "message_index": i,
-                                "question": st.session_state.chat_history[i-1]["content"],
-                                "answer": message["raw_answer"],  # Use unformatted answer
+                                "message_index": adjusted_idx,
+                                "question": st.session_state.chat_history[adjusted_idx-1]["content"],
+                                "answer": message["raw_answer"],
                                 "rating": score,
                                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
                             }
-                            st.session_state.feedback_data.append(feedback)
                             save_feedback(feedback)
+                            st.session_state.feedback_given.add(adjusted_idx)
                             st.rerun()
 
     # User input
     if prompt := st.chat_input("Cosa vuoi chiedere?"):
-        # Add user message to history
+        # Add user message
         st.session_state.chat_history.append({"role": "user", "content": prompt})
+        st.session_state.interaction_count += 1
         
-        # Display user message immediately
+        # Display immediately
         with st.chat_message("user"):
             st.markdown(prompt)
         
-        # Get RAG response
+        # Get response
         with st.spinner("Elaboro la risposta..."):
-            # Wrap async call in synchronous context
+            import asyncio
             try:
                 response = asyncio.run(orchestrator.query(question=prompt))
                 source_map = response.get("sources", {})
-                
-                # Format answer with hyperlinks
                 raw_answer = response["answer"]
                 formatted_answer = format_answer_with_links(raw_answer, source_map)
             except Exception as e:
-                logger.error(f"Query failed: {str(e)}")
-                formatted_answer = "Si è verificato un errore durante l'elaborazione della richiesta."
+                logging.error(f"Query failed: {str(e)}")
+                formatted_answer = "Si è verificato un errore durante l'elaborazione."
         
-        # Add assistant response to history
+        # Add assistant response
         st.session_state.chat_history.append({
-        "role": "assistant", 
-        "content": formatted_answer,
-        "raw_answer": raw_answer,  # Store for feedback
-        "source_map": source_map   # Store for reference
-    })
+            "role": "assistant", 
+            "content": formatted_answer,
+            "raw_answer": raw_answer
+        })
         
-        # Display assistant response immediately
-        with st.chat_message("assistant"):
-            st.markdown(formatted_answer, unsafe_allow_html=False)
+        # Apply history limit
+        if len(st.session_state.chat_history) > MAX_HISTORY:
+            st.session_state.chat_history = st.session_state.chat_history[-MAX_HISTORY:]
+
+        # Force garbage collection periodically
+        if st.session_state.interaction_count % GC_INTERVAL == 0:
+            gc.collect()
         
-        # Rerun to show feedback buttons
+        # Rerun to update UI
         st.rerun()
     
-
+    # Sidebar
     st.sidebar.image("data/gna.png", width=60)
-    # Sidebar for additional info
     with st.sidebar:
         st.header("Informazioni")
         st.markdown(f"""
-    **Assistente AI per il Geoportale Nazionale Archeologia**
-    
-    Questo assistente virtuale utilizza tecnologie di Intelligenza Artificiale per rispondere a domande relative al Geoportale Nazionale Archeologia (GNA).
-    
-    Il modello è stato addestrato sul manuale operativo e sulla documentazione ufficiale del progetto, gestito dall'Istituto Centrale per il Catalogo e la Documentazione (ICCD) e disponibile a questo indirizzo:
-        """)
-        st.markdown(f"""
-    [gna.cultura.gov.it](https://gna.cultura.gov.it/wiki/index.php/Pagina_principale)""", unsafe_allow_html=True)
+        **Assistente AI per il Geoportale Nazionale Archeologia**
         
+        Questo assistente virtuale utilizza tecnologie di Intelligenza Artificiale per rispondere a domande relative al Geoportale Nazionale Archeologia (GNA).
+        
+        Il modello è stato addestrato sul manuale operativo e sulla documentazione ufficiale del progetto, gestito dall'Istituto Centrale per il Catalogo e la Documentazione (ICCD) e disponibile a questo indirizzo:
+            """)
+        st.markdown(f"""
+        [gna.cultura.gov.it](https://gna.cultura.gov.it/wiki/index.php/Pagina_principale)""", unsafe_allow_html=True)
+            
         st.divider()
         
-        if st.session_state.feedback_data:
-            st.subheader("Feedback Raccolti")
-            st.write(f"Totale feedback: {len(st.session_state.feedback_data)}")
-            avg_rating = sum(fb["rating"] for fb in st.session_state.feedback_data) / len(st.session_state.feedback_data)
-            st.metric("Valutazione Media", f"{avg_rating:.1f}/3")
-            
-            if st.button("Esporta tutti i feedback"):
-                try:
-                    feedback_dir = Path(__file__).parent / "feedback"
-                    csv_path = feedback_dir / "feedbacks.csv"
-                    
-                    if csv_path.exists():
-                        df = pd.read_csv(csv_path)
-                        st.download_button(
-                            label="Scarica CSV",
-                            data=df.to_csv(index=False),
-                            file_name="feedbacks_assistenteAI_gna.csv",
-                            mime="text/csv"
-                        )
-                    else:
-                        st.warning("Nessun feedback disponibile per l'esportazione")
-                except Exception as e:
-                    st.error(f"Errore durante l'esportazione: {str(e)}")
+        # Feedback export
+        if st.button("Esporta feedback"):
+            try:
+                import pandas as pd
+                from pathlib import Path
+                feedback_dir = Path(__file__).parent / "feedback"
+                csv_path = feedback_dir / "feedbacks.csv"
+                
+                if csv_path.exists():
+                    df = pd.read_csv(csv_path)
+                    st.download_button(
+                        label="Scarica CSV",
+                        data=df.to_csv(index=False),
+                        file_name="feedbacks_assistenteAI_gna.csv",
+                        mime="text/csv"
+                    )
+                else:
+                    st.warning("Nessun feedback disponibile")
+            except Exception as e:
+                st.error(f"Errore durante l'esportazione: {str(e)}")
 
 if __name__ == "__main__":
+    import re 
     main()

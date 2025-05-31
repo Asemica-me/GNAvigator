@@ -1,11 +1,14 @@
 import asyncio
 from dotenv import load_dotenv
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from mistralai import Mistral, SystemMessage, UserMessage
 import backoff
 import logging
 import os
 import re
+import gc
+import time
+import weakref
 from vector_store import *
 
 load_dotenv()
@@ -13,8 +16,6 @@ LLM = os.getenv("GEN_MODEL")
 logger = logging.getLogger(__name__)
 
 class MistralLLM:
-    """Mistral LLM handler with v1.x client support"""
-    
     def __init__(
         self,
         api_key: str,
@@ -24,13 +25,37 @@ class MistralLLM:
         max_tokens: int = 2000,
         max_concurrency: int = 5
     ):
-        self.client = Mistral(api_key=api_key)
+        self.api_key = api_key
         self.model_name = model_name
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.max_retries = max_retries
         self.semaphore = asyncio.Semaphore(max_concurrency)
-        self.citation_regex = re.compile(r'\[(\d+)\]')  
+        self.citation_regex = re.compile(r'\[(\d+)\]')
+        self._client = None  # Use lazy initialization
+        self.last_used = time.time()
+
+    @property
+    def client(self):
+        """Lazy initialization of Mistral client"""
+        if self._client is None:
+            self._client = Mistral(api_key=self.api_key)
+        self.last_used = time.time()
+        return self._client
+
+    def clear_cache(self):
+        """Release client resources and reset connection"""
+        if self._client:
+            try:
+                # Try to close any existing connections
+                if hasattr(self._client, 'close'):
+                    self._client.close()
+            except Exception as e:
+                logger.warning(f"Error closing Mistral client: {e}")
+            finally:
+                self._client = None
+        gc.collect()
+        logger.info("MistralLLM cache cleared")
 
     def _build_rag_prompt(self, question: str, context: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Construct RAG system prompt with context"""
@@ -94,7 +119,13 @@ class MistralLLM:
 
             except Exception as e:
                 logger.error(f"Generation failed: {str(e)}")
+                # Clear client on error to force reconnect
+                self.clear_cache()
                 raise
+            finally:
+                # Clean up intermediate resources
+                del messages, stream
+                gc.collect()
 
     def _validate_citations(self, response: str, context_size: int) -> str:
         """Ensure citations reference valid sources"""
@@ -114,27 +145,89 @@ class MistralLLM:
 
 
 class RAGOrchestrator:
-    """Orchestrates RAG workflow between vector store and LLM"""
+    """Orchestrates RAG workflow with enhanced memory management"""
     
     def __init__(self, mistral_api_key: str):
-        self.vector_db = VectorDatabaseManager()
-        self.llm = MistralLLM(api_key=mistral_api_key)
+        self.mistral_api_key = mistral_api_key
+        self._vector_db = None
+        self._llm = None
+        self.last_cleanup = time.time()
+        self.query_count = 0
+
+    @property
+    def vector_db(self):
+        """Lazy initialization of vector database"""
+        if self._vector_db is None:
+            self._vector_db = VectorDatabaseManager()
+        return self._vector_db
+
+    @property
+    def llm(self):
+        """Lazy initialization of LLM"""
+        if self._llm is None:
+            self._llm = MistralLLM(api_key=self.mistral_api_key)
+        return self._llm
+
+    def clear_cache(self, full: bool = False):
+        """Release memory resources with optional deep cleanup"""
+        logger.info("Clearing RAG orchestrator cache")
+        
+        # Clear LLM resources
+        if self._llm:
+            self._llm.clear_cache()
+        
+        # Clear vector DB resources if possible
+        if self._vector_db and hasattr(self._vector_db, 'clear_cache'):
+            self._vector_db.clear_cache()
+        
+        # Optional deep cleanup
+        if full:
+            self._vector_db = None
+            self._llm = None
+            logger.info("Full cache clearance completed")
+        
+        # Release any dangling references
+        gc.collect()
+        
+        # Reset counters
+        self.query_count = 0
+        self.last_cleanup = time.time()
         
     async def query(self, question: str, top_k: int = 5) -> Dict[str, Any]:
-        """End-to-end RAG query execution"""
-        context = self.vector_db.query(question, top_k=top_k)
-        answer = await self.llm.generate_async(question=question, context=context)
-        
-        # Map source numbers to URLs
-        source_map = {str(i+1): c["source"] for i, c in enumerate(context)}
-        
-        return {
-            "question": question,
-            "answer": answer,
-            "sources": source_map,
-            "context": context
-        }
+        """End-to-end RAG query execution with memory management"""
+        try:
+            context = self.vector_db.query(question, top_k=top_k)
+            answer = await self.llm.generate_async(question=question, context=context)
+            
+            # Map source numbers to URLs
+            source_map = {str(i+1): c["source"] for i, c in enumerate(context)}
+            
+            # Increment and check for cleanup
+            self.query_count += 1
+            if self.query_count >= 10 or time.time() - self.last_cleanup > 300:  # Every 10 queries or 5 minutes
+                self.clear_cache(full=self.query_count >= 30)  # Deep clean every 30 queries
+            
+            return {
+                "question": question,
+                "answer": answer,
+                "sources": source_map,
+                "context": context
+            }
+            
+        except Exception as e:
+            logger.error(f"Query failed: {e}")
+            # Force cleanup on error
+            self.clear_cache(full=True)
+            raise
+        finally:
+            # Clean up intermediate resources
+            del context
+            gc.collect()
 
     async def initialize_vector_store(self, sitemap_path: str, base_domain: str):
         """Initialize vector store with documents"""
-        await self.vector_db.process_and_store_chunks(sitemap_path, base_domain)
+        try:
+            await self.vector_db.process_and_store_chunks(sitemap_path, base_domain)
+        finally:
+            # Clean up after initialization
+            self.clear_cache(full=False)
