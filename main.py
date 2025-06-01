@@ -233,7 +233,9 @@ def main():
                 formatted_answer = format_answer_with_links(raw_answer, source_map)
             except Exception as e:
                 logging.error(f"Query failed: {str(e)}")
-                formatted_answer = "Si è verificato un errore durante l'elaborazione."
+                error_msg = f"Si è verificato un errore durante l'elaborazione: {type(e).__name__}\n\n{str(e)}"
+                raw_answer = error_msg
+                formatted_answer = error_msg 
         
         # Add assistant response
         st.session_state.chat_history.append({

@@ -67,7 +67,7 @@ class MistralLLM:
         Rispondi **sempre** in italiano, indipendentemente dalla lingua della domanda, a meno che l'utente non richieda esplicitamente un'altra lingua.
         Cita le fonti utilizzando la notazione [numero] dove:
            - "numero" corrisponde esattamente all'URL della fonte nel contesto;
-           - Usa numeri separati per fonti diverse (es: [1][3]);
+           - Usa numeri separati per fonti diverse;
         Se non hai informazioni sufficienti per rispondere, rispondi "Non ho informazioni sufficienti".
 
         Le tue risposte devono essere sempre:
@@ -77,11 +77,19 @@ class MistralLLM:
         - Complete e chiare, evitando di lasciare domande senza risposta
         """
 
-        context_str = "\n\n".join(
-            f"FONTE {idx}: {item['source']}\nCONTENUTO: {item['content']}" 
-            for idx, item in enumerate(context, start=1)
-        )
-
+        # Build context string with grouped sources
+        context_parts = []
+        for idx, source_group in enumerate(context, start=1):
+            url = source_group["source"]
+            contents = source_group["contents"]
+            contents_str = "\n".join(
+                f"CONTENUTO {j}: {content}" 
+                for j, content in enumerate(contents, start=1)
+            )
+            context_parts.append(f"FONTE {idx}: {url}\n{contents_str}")
+        
+        context_str = "\n\n".join(context_parts)
+        
         return [
             SystemMessage(content=system_content),
             UserMessage(content=f"CONTESTO:\n{context_str}\n\nDOMANDA: {question}")
@@ -115,7 +123,9 @@ class MistralLLM:
                     if chunk.data.choices[0].delta.content:
                         collected_messages.append(chunk.data.choices[0].delta.content)
                 
-                return "".join(collected_messages).strip()
+                response = "".join(collected_messages).strip()
+                # Validate citations against number of unique sources
+                return self._validate_citations(response, len(context))
 
             except Exception as e:
                 logger.error(f"Generation failed: {str(e)}")
@@ -139,7 +149,7 @@ class MistralLLM:
 
         if not citations:
             logger.warning("No valid citations found in response")
-            return response + "\n\n[ATTENZIONE: Risposta non citata]"
+            return response
             
         return response
 
@@ -196,22 +206,45 @@ class RAGOrchestrator:
     async def query(self, question: str, top_k: int = 5) -> Dict[str, Any]:
         """End-to-end RAG query execution with memory management"""
         try:
-            context = self.vector_db.query(question, top_k=top_k)
-            answer = await self.llm.generate_async(question=question, context=context)
+            context_chunks = self.vector_db.query(question, top_k=top_k)
             
-            # Map source numbers to URLs
-            source_map = {str(i+1): c["source"] for i, c in enumerate(context)}
+            # Group chunks by URL
+            url_to_contents = {}
+            for chunk in context_chunks:
+                url = chunk["source"]
+                if url not in url_to_contents:
+                    url_to_contents[url] = []
+                url_to_contents[url].append(chunk["content"])
+            
+            # Create grouped context structure
+            grouped_context = []
+            for url, contents in url_to_contents.items():
+                grouped_context.append({
+                    "source": url,
+                    "contents": contents
+                })
+            
+            # Pass grouped context to LLM
+            answer = await self.llm.generate_async(
+                question=question, 
+                context=grouped_context
+            )
+            
+            # Create source map {index: url}
+            source_map = {}
+            for idx, group in enumerate(grouped_context, start=1):
+                source_map[str(idx)] = group["source"]
             
             # Increment and check for cleanup
             self.query_count += 1
-            if self.query_count >= 10 or time.time() - self.last_cleanup > 300:  # Every 10 queries or 5 minutes
-                self.clear_cache(full=self.query_count >= 30)  # Deep clean every 30 queries
+            if self.query_count >= 10 or time.time() - self.last_cleanup > 300:
+                self.clear_cache(full=self.query_count >= 30)
             
             return {
                 "question": question,
                 "answer": answer,
                 "sources": source_map,
-                "context": context
+                "context": context_chunks  # Return original chunks
             }
             
         except Exception as e:
@@ -221,7 +254,7 @@ class RAGOrchestrator:
             raise
         finally:
             # Clean up intermediate resources
-            del context
+            del context_chunks
             gc.collect()
 
     async def initialize_vector_store(self, sitemap_path: str, base_domain: str):
