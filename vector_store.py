@@ -45,7 +45,6 @@ class VectorDatabaseManager:
                 self.index = faiss.read_index(FAISS_INDEX_PATH)
                 with open(METADATA_PATH, 'rb') as f:
                     self.metadata_db = pickle.load(f)
-                logger.info("Loaded existing FAISS database")
             except Exception as e:
                 logger.error(f"Error loading database: {str(e)}")
                 self._reset_database()
@@ -63,7 +62,6 @@ class VectorDatabaseManager:
     def embedding_model(self):
         """Lazy loading of embedding model with memory management"""
         if self._embedding_model is None:
-            logger.info("Loading embedding model...")
             
             # Check GPU memory before loading
             if torch.cuda.is_available():

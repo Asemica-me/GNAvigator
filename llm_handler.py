@@ -147,10 +147,6 @@ class MistralLLM:
             else:
                 logger.warning(f"Invalid citation detected: [{citation}]")
 
-        if not citations:
-            logger.warning("No valid citations found in response")
-            return response
-            
         return response
 
 
