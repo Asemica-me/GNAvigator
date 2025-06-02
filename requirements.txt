@@ -17,5 +17,4 @@ opencv-python-headless
 requests
 backoff
 faiss-cpu
-sqlite3
 gitpython
