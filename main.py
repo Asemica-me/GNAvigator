@@ -8,7 +8,9 @@ import pandas as pd
 import re
 
 # Import feedback handling functions from separate module
-from feedback_handling import init_db, save_feedback, export_feedbacks, FEEDBACK_DB
+from feedback_handling import init_db, git_sync, save_feedback, export_feedbacks, FEEDBACK_DB
+init_db()
+git_sync()
 
 # --- Critical Dependencies Setup ---
 # Create directories first (runs once per session)
