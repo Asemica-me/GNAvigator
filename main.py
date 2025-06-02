@@ -4,6 +4,11 @@ import os
 import time
 import logging
 import gc
+import pandas as pd
+import re
+
+# Import feedback handling functions from separate module
+from feedback_handling import init_db, save_feedback, export_feedbacks, FEEDBACK_DB
 
 # --- Critical Dependencies Setup ---
 # Create directories first (runs once per session)
@@ -121,36 +126,14 @@ def format_answer_with_links(answer: str, source_map: dict) -> str:
         return match.group(0)
     return re.sub(r'\[\'?(\d+)\'?\]', replace_citation, answer)
 
-# --- Feedback Handling ---
-def save_feedback(feedback_data: dict):
-    """Save feedback to CSV file"""
-    try:
-        import pandas as pd
-        from pathlib import Path
-        logger = logging.getLogger(__name__)
-        
-        feedback_dir = Path(__file__).parent / "feedback"
-        feedback_dir.mkdir(parents=True, exist_ok=True)
-        csv_path = feedback_dir / "feedbacks.csv"
-        
-        df = pd.DataFrame([feedback_data])
-        header = not csv_path.exists()
-        
-        df.to_csv(
-            csv_path, 
-            mode="a", 
-            header=header, 
-            index=False,
-            encoding="utf-8"
-        )
-    except Exception as e:
-        logger.error(f"Failed to save feedback: {str(e)}")
-
 # --- Main Function with Memory Optimizations ---
 def main():
     import logging
     MAX_HISTORY = 10  # Limit chat history entries
     GC_INTERVAL = 3  # Garbage collection interval in interactions
+    
+    # Initialize feedback database
+    init_db()
     
     # Initialize orchestrator with caching
     @st.cache_resource(show_spinner="Caricamento del modello...")
@@ -274,16 +257,12 @@ def main():
         # Feedback export
         if st.button("Esporta feedback"):
             try:
-                import pandas as pd
-                from pathlib import Path
-                feedback_dir = Path(__file__).parent / "feedback"
-                csv_path = feedback_dir / "feedbacks.csv"
-                
-                if csv_path.exists():
-                    df = pd.read_csv(csv_path)
+                df = export_feedbacks()
+                if not df.empty:
+                    csv = df.to_csv(index=False)
                     st.download_button(
                         label="Scarica CSV",
-                        data=df.to_csv(index=False),
+                        data=csv,
                         file_name="feedbacks_assistenteAI_gna.csv",
                         mime="text/csv"
                     )
@@ -293,5 +272,4 @@ def main():
                 st.error(f"Errore durante l'esportazione: {str(e)}")
 
 if __name__ == "__main__":
-    import re 
     main()
