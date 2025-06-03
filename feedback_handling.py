@@ -6,6 +6,8 @@ import os
 import subprocess
 import time
 from dotenv import load_dotenv
+from urllib.parse import quote_plus  # For safe token URL encoding
+import datetime 
 
 load_dotenv()
 
@@ -13,6 +15,7 @@ FEEDBACK_DB = Path(__file__).parent / "feedback" / "feedbacks.db"
 
 def init_db():
     """Initialize the SQLite database for feedbacks"""
+    conn = None
     try:
         FEEDBACK_DB.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(FEEDBACK_DB)
@@ -34,50 +37,57 @@ def init_db():
             conn.close()
 
 def git_sync():
-    """Sync feedback database to GitHub"""
+    """Sync feedback database to GitHub using token authentication"""
     token = os.getenv("GITHUB_TOKEN")
-    if not token:
-        logging.error("GitHub token not found in environment variables")
+    repo_url = os.getenv("GITHUB_REPO_URL")
+    
+    if not token or not repo_url:
+        logging.error("GitHub credentials not found in environment variables")
         return
         
     try:
         repo_dir = Path(__file__).parent
-        repo_url = os.getenv("GITHUB_REPO_URL")
         
-        # Configure Git to store credentials temporarily
-        credentials_file = repo_dir / ".git-credentials"
-        with open(credentials_file, "w") as f:
-            f.write(f"https://{token}@github.com")
+        # 1. Configure ephemeral Git identity (local to repo only)
+        subprocess.run(["git", "config", "--local", "user.email", "automated@streamlit.app"], 
+                      cwd=repo_dir, check=True)
+        subprocess.run(["git", "config", "--local", "user.name", "Streamlit Automated Process"], 
+                      cwd=repo_dir, check=True)
         
-        # Set Git configuration for this operation
-        env = os.environ.copy()
-        env["GIT_CONFIG_PARAMETERS"] = f"'credential.helper=store --file {credentials_file}'"
-        env["GIT_TERMINAL_PROMPT"] = "0"
-        
-        # Initialize Git repo if needed
+        # 2. Initialize Git repo if needed
         if not (repo_dir / ".git").exists():
-            subprocess.run(["git", "init"], cwd=repo_dir, check=True, env=env)
-            subprocess.run(["git", "remote", "add", "origin", repo_url], 
-                          cwd=repo_dir, check=True, env=env)
+            subprocess.run(["git", "init"], cwd=repo_dir, check=True)
         
-        # Add and commit changes
-        subprocess.run(["git", "add", str(FEEDBACK_DB)], cwd=repo_dir, check=True, env=env)
-        commit_message = f"Feedback update {time.strftime('%Y%m%d-%H%M%S')}"
-        subprocess.run(["git", "commit", "-m", commit_message], 
-                      cwd=repo_dir, check=True, env=env)
+        # 3. Stage changes
+        subprocess.run(["git", "add", str(FEEDBACK_DB)], cwd=repo_dir, check=True)
         
-        # Push changes
-        subprocess.run(["git", "push", "origin", "main", "--force"], 
-                      cwd=repo_dir, check=True, env=env)
+        # 4. Commit changes
+        commit_message = f"Feedback update {datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        subprocess.run(["git", "commit", "-m", commit_message], cwd=repo_dir, check=True)
+        
+        # 5. Push with token authentication (URL-encoded)
+        encoded_token = quote_plus(token)  # Handle special characters
+        auth_repo_url = repo_url.replace("https://", f"https://{encoded_token}@")
+        
+        # Use timeout to prevent hanging in ephemeral st environment
+        subprocess.run(
+            ["git", "push", auth_repo_url, "main", "--force"],
+            cwd=repo_dir,
+            check=True,
+            timeout=30  # Fail fast if network issues
+        )
         logging.info("Feedback database synced to GitHub")
         
-        # Clean up credentials file
-        credentials_file.unlink()
+    except subprocess.TimeoutExpired:
+        logging.error("Git push timed out (30s)")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Git operation failed: {str(e)}")
     except Exception as e:
-        logging.error(f"Git sync failed: {e}")
+        logging.error(f"Unexpected error during Git sync: {str(e)}")
 
 def save_feedback(feedback_data: dict):
-    """Save feedback data to the database."""
+    """Save feedback data to the database with memory optimization"""
+    conn = None
     try:
         conn = sqlite3.connect(FEEDBACK_DB)
         c = conn.cursor()
@@ -96,19 +106,26 @@ def save_feedback(feedback_data: dict):
     finally:
         if conn:
             conn.close()
+        
+        # Explicit cleanup to prevent memory leaks
+        del feedback_data
+        import gc; gc.collect()
     
     # Sync to GitHub after saving
     git_sync()
 
 def export_feedbacks():
-    """Export feedbacks from the database as a DataFrame."""
+    """Export feedbacks from the database as a DataFrame with resource cleanup"""
+    conn = None
     try:
         conn = sqlite3.connect(FEEDBACK_DB)
         df = pd.read_sql_query("SELECT * FROM feedbacks", conn)
         return df
     except Exception as e:
         logging.error(f"Error exporting feedbacks: {e}")
-        return pd.DataFrame()  # Return empty DF on error
+        return pd.DataFrame()
     finally:
         if conn:
             conn.close()
+        # Clean up resources
+        import gc; gc.collect()
