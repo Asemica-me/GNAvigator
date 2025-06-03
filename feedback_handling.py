@@ -7,6 +7,8 @@ import subprocess
 import datetime
 from urllib.parse import quote_plus
 import sys
+import time
+import gc
 
 FEEDBACK_DB = Path(__file__).parent / "feedback" / "feedbacks.db"
 
@@ -45,25 +47,25 @@ def get_github_credentials():
     token = None
     repo_url = None
     
-    # Try Streamlit secrets first (Cloud and local with secrets.toml)
+    # Try Streamlit secrets first
     try:
         import streamlit as st
-        token = st.secrets.get("GITHUB_TOKEN")
-        repo_url = st.secrets.get("GITHUB_REPO_URL")
+        token = st.secrets.get("GITHUB_TOKEN", os.getenv("GITHUB_TOKEN"))
+        repo_url = st.secrets.get("GITHUB_REPO_URL", os.getenv("GITHUB_REPO_URL"))
         if token and repo_url:
             logging.info("Using credentials from Streamlit secrets")
             return token, repo_url
     except (ImportError, AttributeError, KeyError):
         pass
     
-    # Try environment variables (works for Streamlit Cloud and some servers)
+    # Try environment variables
     token = os.getenv("GITHUB_TOKEN")
     repo_url = os.getenv("GITHUB_REPO_URL")
     if token and repo_url:
         logging.info("Using credentials from environment variables")
         return token, repo_url
     
-    # Try dotenv file for local development
+    # Try dotenv file
     try:
         from dotenv import load_dotenv
         load_dotenv()
@@ -75,19 +77,7 @@ def get_github_credentials():
     except ImportError:
         pass
     
-    # Final fallback - try config file
-    try:
-        import configparser
-        config = configparser.ConfigParser()
-        config.read('config.ini')
-        token = config.get('github', 'GITHUB_TOKEN', fallback=None)
-        repo_url = config.get('github', 'GITHUB_REPO_URL', fallback=None)
-        if token and repo_url:
-            logging.info("Using credentials from config file")
-            return token, repo_url
-    except (ImportError, configparser.Error):
-        pass
-    
+    # Final fallback
     return None, None
 
 def git_sync():
@@ -101,13 +91,23 @@ def git_sync():
     try:
         repo_dir = Path(__file__).parent
         
-        # Configure ephemeral Git identity
+        # 1. Handle Git lock file if it exists
+        lock_file = repo_dir / ".git" / "index.lock"
+        if lock_file.exists():
+            try:
+                lock_file.unlink()
+                logging.warning("Removed stale Git index.lock file")
+            except Exception as e:
+                logging.error(f"Failed to remove lock file: {e}")
+                return
+        
+        # 2. Configure ephemeral Git identity
         subprocess.run(["git", "config", "--local", "user.email", "automated@streamlit.app"], 
                       cwd=repo_dir, check=True)
         subprocess.run(["git", "config", "--local", "user.name", "Streamlit Automated Process"], 
                       cwd=repo_dir, check=True)
         
-        # Initialize Git repo if needed
+        # 3. Initialize Git repo if needed
         if not (repo_dir / ".git").exists():
             logging.info("Initializing new Git repository")
             subprocess.run(["git", "init"], cwd=repo_dir, check=True)
@@ -115,56 +115,64 @@ def git_sync():
             subprocess.run(["git", "remote", "add", "origin", repo_url], 
                           cwd=repo_dir, check=True)
         
-        # Stage changes
+        # 4. Stage changes
         subprocess.run(["git", "add", str(FEEDBACK_DB)], cwd=repo_dir, check=True)
         
-        # Check if there are changes to commit
+        # 5. Check for changes
         status_result = subprocess.run(
             ["git", "status", "--porcelain"],
             cwd=repo_dir,
             capture_output=True,
-            text=True
+            text=True,
+            check=True
         )
         if not status_result.stdout.strip():
             logging.info("No changes to commit")
             return
         
-        # Commit changes
+        # 6. Commit changes
         commit_message = f"Feedback update {datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
         subprocess.run(["git", "commit", "-m", commit_message], cwd=repo_dir, check=True)
         
-        # Push with token authentication
+        # 7. Push with token authentication
         encoded_token = quote_plus(token)
         auth_repo_url = repo_url.replace("https://", f"https://{encoded_token}@")
         
-        # Push with timeout
-        try:
-            subprocess.run(
-                ["git", "push", auth_repo_url, "main", "--force"],
-                cwd=repo_dir,
-                check=True,
-                timeout=30
-            )
-            logging.info("Feedback database synced to GitHub")
-        except subprocess.TimeoutExpired:
-            logging.warning("Git push timed out - retrying")
-            subprocess.run(
-                ["git", "push", auth_repo_url, "main", "--force"],
-                cwd=repo_dir,
-                check=True,
-                timeout=60
-            )
-            logging.info("Push succeeded after retry")
-        
+        # 8. Push with retry logic
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                subprocess.run(
+                    ["git", "push", auth_repo_url, "main", "--force"],
+                    cwd=repo_dir,
+                    check=True,
+                    timeout=30
+                )
+                logging.info("Feedback database synced to GitHub")
+                break
+            except subprocess.TimeoutExpired:
+                if attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 10
+                    logging.warning(f"Git push timed out - retrying in {wait_time}s")
+                    time.sleep(wait_time)
+                else:
+                    logging.error("Git push failed after multiple attempts")
+                    raise
     except subprocess.CalledProcessError as e:
         logging.error(f"Git operation failed: {str(e)}")
-        logging.error(f"Command output: {e.stderr}")
+        if e.stderr:
+            logging.error(f"Command stderr: {e.stderr.decode().strip()}")
+        if e.stdout:
+            logging.error(f"Command stdout: {e.stdout.decode().strip()}")
     except Exception as e:
         logging.error(f"Unexpected error during Git sync: {str(e)}")
     finally:
-        # Clean up sensitive data
-        del token, repo_url, auth_repo_url
-        import gc; gc.collect()
+        # Safe cleanup without UnboundLocalError
+        if 'auth_repo_url' in locals():
+            del auth_repo_url
+        if 'token' in locals():
+            token = None
+        gc.collect()
 
 def save_feedback(feedback_data: dict):
     """Save feedback data to the database"""
@@ -190,6 +198,7 @@ def save_feedback(feedback_data: dict):
     
     # Sync to GitHub after saving
     git_sync()
+    gc.collect()
 
 def export_feedbacks():
     """Export feedbacks from the database as a DataFrame"""
@@ -204,3 +213,4 @@ def export_feedbacks():
     finally:
         if conn:
             conn.close()
+        gc.collect()

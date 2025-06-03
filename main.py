@@ -8,7 +8,6 @@ import pandas as pd
 import re
 from feedback_handling import init_db, git_sync, save_feedback, export_feedbacks, FEEDBACK_DB
 init_db()
-git_sync()
 
 # --- Critical Dependencies Setup ---
 # Create directories first (runs once per session)
