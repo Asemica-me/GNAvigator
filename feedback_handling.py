@@ -5,11 +5,8 @@ import pandas as pd
 import os
 import subprocess
 import time
-from dotenv import load_dotenv
-from urllib.parse import quote_plus  # For safe token URL encoding
-import datetime 
-
-load_dotenv()
+import datetime
+from urllib.parse import quote_plus
 
 FEEDBACK_DB = Path(__file__).parent / "feedback" / "feedbacks.db"
 
@@ -36,19 +33,40 @@ def init_db():
         if conn:
             conn.close()
 
+def get_github_credentials():
+    """Retrieve GitHub credentials from environment or Streamlit secrets"""
+    try:
+        # Attempt to import Streamlit for secrets access
+        import streamlit as st
+        
+        # Use Streamlit secrets if available
+        if "GITHUB_TOKEN" in st.secrets:
+            token = st.secrets["GITHUB_TOKEN"]
+        else:
+            token = os.getenv("GITHUB_TOKEN")
+            
+        if "GITHUB_REPO_URL" in st.secrets:
+            repo_url = st.secrets["GITHUB_REPO_URL"]
+        else:
+            repo_url = os.getenv("GITHUB_REPO_URL")
+            
+        return token, repo_url
+    except ImportError:
+        # Fallback if Streamlit isn't available
+        return os.getenv("GITHUB_TOKEN"), os.getenv("GITHUB_REPO_URL")
+
 def git_sync():
     """Sync feedback database to GitHub using token authentication"""
-    token = os.getenv("GITHUB_TOKEN")
-    repo_url = os.getenv("GITHUB_REPO_URL")
+    token, repo_url = get_github_credentials()
     
     if not token or not repo_url:
-        logging.error("GitHub credentials not found in environment variables")
+        logging.error("GitHub credentials not found")
         return
         
     try:
         repo_dir = Path(__file__).parent
         
-        # 1. Configure ephemeral Git identity (local to repo only)
+        # 1. Configure ephemeral Git identity
         subprocess.run(["git", "config", "--local", "user.email", "automated@streamlit.app"], 
                       cwd=repo_dir, check=True)
         subprocess.run(["git", "config", "--local", "user.name", "Streamlit Automated Process"], 
@@ -57,6 +75,8 @@ def git_sync():
         # 2. Initialize Git repo if needed
         if not (repo_dir / ".git").exists():
             subprocess.run(["git", "init"], cwd=repo_dir, check=True)
+            subprocess.run(["git", "remote", "add", "origin", repo_url], 
+                          cwd=repo_dir, check=True)
         
         # 3. Stage changes
         subprocess.run(["git", "add", str(FEEDBACK_DB)], cwd=repo_dir, check=True)
@@ -65,16 +85,16 @@ def git_sync():
         commit_message = f"Feedback update {datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
         subprocess.run(["git", "commit", "-m", commit_message], cwd=repo_dir, check=True)
         
-        # 5. Push with token authentication (URL-encoded)
+        # 5. Push with token authentication
         encoded_token = quote_plus(token)  # Handle special characters
         auth_repo_url = repo_url.replace("https://", f"https://{encoded_token}@")
         
-        # Use timeout to prevent hanging in ephemeral st environment
+        # Use timeout to prevent hanging
         subprocess.run(
             ["git", "push", auth_repo_url, "main", "--force"],
             cwd=repo_dir,
             check=True,
-            timeout=30  # Fail fast if network issues
+            timeout=30
         )
         logging.info("Feedback database synced to GitHub")
         
@@ -84,6 +104,10 @@ def git_sync():
         logging.error(f"Git operation failed: {str(e)}")
     except Exception as e:
         logging.error(f"Unexpected error during Git sync: {str(e)}")
+    finally:
+        # Clean up resources
+        del token, repo_url
+        import gc; gc.collect()
 
 def save_feedback(feedback_data: dict):
     """Save feedback data to the database with memory optimization"""
@@ -107,7 +131,7 @@ def save_feedback(feedback_data: dict):
         if conn:
             conn.close()
         
-        # Explicit cleanup to prevent memory leaks
+        # Explicit cleanup
         del feedback_data
         import gc; gc.collect()
     
@@ -115,7 +139,7 @@ def save_feedback(feedback_data: dict):
     git_sync()
 
 def export_feedbacks():
-    """Export feedbacks from the database as a DataFrame with resource cleanup"""
+    """Export feedbacks from the database as a DataFrame"""
     conn = None
     try:
         conn = sqlite3.connect(FEEDBACK_DB)

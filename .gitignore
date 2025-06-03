@@ -4,3 +4,4 @@
 __pycache__/
 .gitignore
 .streamlit/config.toml
+.streamlit/secrets.toml

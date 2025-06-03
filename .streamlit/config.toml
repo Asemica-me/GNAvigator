@@ -1,6 +1,3 @@
 [server]
 fileWatcherType = "none"
 runOnSave = true
-[env]
-GITHUB_TOKEN = "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"
-GITHUB_REPO_URL = "https://github.com/your-username/your-repo.git"
