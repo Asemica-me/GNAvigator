@@ -7,14 +7,12 @@ import subprocess
 import time
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
 load_dotenv()
 
-# Define the feedback database path
 FEEDBACK_DB = Path(__file__).parent / "feedback" / "feedbacks.db"
 
 def init_db():
-    """Initialize the SQLite database for feedbacks."""
+    """Initialize the SQLite database for feedbacks"""
     try:
         FEEDBACK_DB.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(FEEDBACK_DB)
@@ -36,7 +34,7 @@ def init_db():
             conn.close()
 
 def git_sync():
-    """Sync feedback database to GitHub using token from .env"""
+    """Sync feedback database to GitHub"""
     token = os.getenv("GITHUB_TOKEN")
     if not token:
         logging.error("GitHub token not found in environment variables")
@@ -44,7 +42,7 @@ def git_sync():
         
     try:
         repo_dir = Path(__file__).parent
-        repo_url = os.getenv("GITHUB_REPO_URL", "https://github.com/your-username/your-repo.git")
+        repo_url = os.getenv("GITHUB_REPO_URL")
         
         # Configure Git to store credentials temporarily
         credentials_file = repo_dir / ".git-credentials"

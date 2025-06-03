@@ -6,8 +6,6 @@ import logging
 import gc
 import pandas as pd
 import re
-
-# Import feedback handling functions from separate module
 from feedback_handling import init_db, git_sync, save_feedback, export_feedbacks, FEEDBACK_DB
 init_db()
 git_sync()
@@ -18,7 +16,6 @@ USER_DATA_DIR = "/tmp/nlp_data"
 os.makedirs(f"{USER_DATA_DIR}/spacy", exist_ok=True)
 os.makedirs(f"{USER_DATA_DIR}/nltk", exist_ok=True)
 
-# Set environment variables (persistent for session)
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
 os.environ.setdefault("SPACY_DATA_DIR", f"{USER_DATA_DIR}/spacy")
 os.environ.setdefault("NLTK_DATA", f"{USER_DATA_DIR}/nltk")
@@ -128,7 +125,7 @@ def format_answer_with_links(answer: str, source_map: dict) -> str:
         return match.group(0)
     return re.sub(r'\[\'?(\d+)\'?\]', replace_citation, answer)
 
-# --- Main Function with Memory Optimizations ---
+# --- Main Function with memory optimizations ---
 def main():
     import logging
     MAX_HISTORY = 10  # Limit chat history entries
@@ -174,7 +171,7 @@ def main():
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
             
-            # Feedback only for assistant messages
+            # Feedback for assistant messages
             if message["role"] == "assistant":
                 if adjusted_idx in st.session_state.feedback_given:
                     st.success("✅ Valutazione registrata")
@@ -200,11 +197,10 @@ def main():
 
     # User input
     if prompt := st.chat_input("Cosa vuoi chiedere?"):
-        # Add user message
+
         st.session_state.chat_history.append({"role": "user", "content": prompt})
         st.session_state.interaction_count += 1
         
-        # Display immediately
         with st.chat_message("user"):
             st.markdown(prompt)
         
@@ -237,7 +233,7 @@ def main():
         if st.session_state.interaction_count % GC_INTERVAL == 0:
             gc.collect()
         
-        # Rerun to update UI
+        # update UI
         st.rerun()
     
     # Sidebar

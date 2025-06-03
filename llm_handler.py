@@ -67,7 +67,7 @@ class MistralLLM:
         Rispondi **sempre** in italiano, indipendentemente dalla lingua della domanda, a meno che l'utente non richieda esplicitamente un'altra lingua.
         Cita le fonti utilizzando la notazione [numero] dove:
            - "numero" corrisponde esattamente all'URL della fonte nel contesto;
-           - Usa numeri separati per fonti diverse;
+           - usa numeri separati per fonti diverse;
         Se non hai informazioni sufficienti per rispondere, rispondi "Non ho informazioni sufficienti".
 
         Le tue risposte devono essere sempre:
