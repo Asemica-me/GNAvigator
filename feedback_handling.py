@@ -5,7 +5,6 @@ import pandas as pd
 import os
 import subprocess
 import datetime
-from urllib.parse import quote_plus
 import sys
 import time
 import gc
@@ -132,18 +131,23 @@ def git_sync():
         
         # 6. Commit changes
         commit_message = f"Feedback update {datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        subprocess.run(
+                    ["git", "pull", auth_repo_url, "main"],
+                    cwd=repo_dir,
+                    check=True,
+                    timeout=30
+                )
         subprocess.run(["git", "commit", "-m", commit_message], cwd=repo_dir, check=True)
         
         # 7. Push with token authentication
-        encoded_token = quote_plus(token)
-        auth_repo_url = repo_url.replace("https://", f"https://{encoded_token}@")
+        auth_repo_url = repo_url.replace("https://", f"https://{token}@")
         
         # 8. Push with retry logic
         max_retries = 2
         for attempt in range(max_retries):
             try:
                 subprocess.run(
-                    ["git", "push", auth_repo_url, "main", "--force"],
+                    ["git", "push", auth_repo_url, "main"],
                     cwd=repo_dir,
                     check=True,
                     timeout=30
