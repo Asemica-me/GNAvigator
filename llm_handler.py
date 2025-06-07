@@ -57,7 +57,7 @@ class MistralLLM:
         gc.collect()
         logger.info("MistralLLM cache cleared")
 
-    def _build_rag_prompt(self, question: str, context: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _build_rag_prompt(self, question: str, context: List[Dict[str, Any]], chat_history: Optional[List[Dict[str, str]]] = None) -> List[Dict[str, Any]]:
         """Construct RAG system prompt with context"""
         system_content = """
         Sei un assistente virtuale incaricato di rispondere a domande sul manuale operativo del Geoportale Nazionale Archeologia (GNA), disponibile all'indirizzo: https://gna.cultura.gov.it/wiki/index.php/Pagina_principale, e gestito dall'Istituto Centrale per il Catalogo e la Documentazione (ICCD).
@@ -90,11 +90,25 @@ class MistralLLM:
         
         context_str = "\n\n".join(context_parts)
         
-        return [
-            SystemMessage(content=system_content),
-            UserMessage(content=f"CONTESTO:\n{context_str}\n\nDOMANDA: {question}")
-        ]
-
+        # Build message list with conversation history
+        messages = [SystemMessage(content=system_content)]
+        
+        # Add chat history if exists
+        if chat_history:
+            for msg in chat_history:
+                if msg["role"] == "user":
+                    messages.append(UserMessage(content=msg["content"]))
+                elif msg["role"] == "assistant":
+                    messages.append(SystemMessage(content=msg["content"]))
+        
+        # Add current context and question
+        messages.append(
+            UserMessage(
+                content=f"CONTESTO:\n{context_str}\n\nDOMANDA: {question}"
+            )
+        )
+        
+        return messages
     @backoff.on_exception(
         backoff.expo,
         Exception,
@@ -105,12 +119,13 @@ class MistralLLM:
         self,
         question: str,
         context: List[Dict[str, Any]],
-        temperature: float = None
+        temperature: float = None,
+        chat_history: Optional[List[Dict[str, str]]] = None
     ) -> str:
         """Generate answer with RAG context using async streaming"""
         async with self.semaphore:
             try:
-                messages = self._build_rag_prompt(question, context)
+                messages = self._build_rag_prompt(question, context, chat_history)
                 stream = await self.client.chat.stream_async(
                     model=self.model_name,
                     messages=messages,
@@ -199,7 +214,7 @@ class RAGOrchestrator:
         self.query_count = 0
         self.last_cleanup = time.time()
         
-    async def query(self, question: str, top_k: int = 5) -> Dict[str, Any]:
+    async def query(self, question: str, top_k: int=5, chat_history: Optional[List[Dict[str, str]]] = None,) -> Dict[str, Any]:
         """End-to-end RAG query execution with memory management"""
         try:
             context_chunks = self.vector_db.query(question, top_k=top_k)
@@ -223,7 +238,8 @@ class RAGOrchestrator:
             # Pass grouped context to LLM
             answer = await self.llm.generate_async(
                 question=question, 
-                context=grouped_context
+                context=grouped_context,
+                chat_history=chat_history
             )
             
             # Create source map {index: url}
@@ -240,7 +256,8 @@ class RAGOrchestrator:
                 "question": question,
                 "answer": answer,
                 "sources": source_map,
-                "context": context_chunks  # Return original chunks
+                "context": context_chunks,
+                "updated_history": self._update_history(chat_history, question, answer) 
             }
             
         except Exception as e:
@@ -252,6 +269,23 @@ class RAGOrchestrator:
             # Clean up intermediate resources
             del context_chunks
             gc.collect()
+
+    def _update_history(
+        self,
+        history: Optional[List[Dict[str, str]]],
+        question: str,
+        answer: str
+    ) -> List[Dict[str, str]]:
+        """Update chat history with new exchange"""
+        new_history = history.copy() if history else []
+        new_history.append({"role": "user", "content": question})
+        new_history.append({"role": "assistant", "content": answer})
+        
+        # Optional: Implement history truncation here
+        # if len(new_history) > 10:  # Keep last 5 exchanges (10 messages)
+        #     new_history = new_history[-10:]
+        
+        return new_history
 
     async def initialize_vector_store(self, sitemap_path: str, base_domain: str):
         """Initialize vector store with documents"""

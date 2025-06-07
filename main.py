@@ -207,7 +207,18 @@ def main():
         with st.spinner("Elaboro la risposta..."):
             import asyncio
             try:
-                response = asyncio.run(orchestrator.query(question=prompt))
+                # Prepare chat history for LLM (only role and content)
+                llm_history = [
+                    {"role": msg["role"], "content": msg["content"]} 
+                    for msg in st.session_state.chat_history
+                    if "raw_answer" not in msg  # Exclude assistant's raw answer
+                ]
+                
+                response = asyncio.run(orchestrator.query(
+                    question=prompt, 
+                    chat_history=llm_history,  # Pass conversation history
+                    top_k=5
+                ))
                 source_map = response.get("sources", {})
                 raw_answer = response["answer"]
                 formatted_answer = format_answer_with_links(raw_answer, source_map)
@@ -250,7 +261,18 @@ def main():
         [gna.cultura.gov.it](https://gna.cultura.gov.it/wiki/index.php/Pagina_principale)""", unsafe_allow_html=True)
             
         st.divider()
-        
+
+        # Add clear chat history button
+        if st.button("Cancella cronologia chat"):
+            st.session_state.chat_history = []
+            st.rerun()
+        st.caption("Gestione feedback")
+        st.markdown("""
+        Lascia un feedback sulle risposte dell'assistente per migliorare le sue prestazioni.
+        """)
+
+        st.divider()
+            
         # Feedback export
         if st.button("Esporta feedback"):
             try:

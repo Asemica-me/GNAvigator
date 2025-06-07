@@ -56,7 +56,6 @@ class VectorDatabaseManager:
         """Initialize empty database state"""
         self.index = None
         self.metadata_db = []
-        logger.info("Initialized new FAISS database")
 
     @property
     def embedding_model(self):
@@ -81,7 +80,6 @@ class VectorDatabaseManager:
             # Reduce memory footprint
             if device == 'cuda':
                 self._embedding_model.half()  # Use half precision
-            logger.info(f"Embedding model loaded on {device}")
         
         return self._embedding_model
 

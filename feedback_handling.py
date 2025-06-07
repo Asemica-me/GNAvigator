@@ -34,7 +34,6 @@ def init_db():
                     rating INTEGER NOT NULL
                     )''')
         conn.commit()
-        logging.info("Feedback database initialized")
     except Exception as e:
         logging.error(f"Error initializing feedback database: {e}")
     finally:
@@ -52,7 +51,6 @@ def get_github_credentials():
         token = st.secrets.get("GITHUB_TOKEN", os.getenv("GITHUB_TOKEN"))
         repo_url = st.secrets.get("GITHUB_REPO_URL", os.getenv("GITHUB_REPO_URL"))
         if token and repo_url:
-            logging.info("Using credentials from Streamlit secrets")
             return token, repo_url
     except (ImportError, AttributeError, KeyError):
         pass
@@ -61,7 +59,6 @@ def get_github_credentials():
     token = os.getenv("GITHUB_TOKEN")
     repo_url = os.getenv("GITHUB_REPO_URL")
     if token and repo_url:
-        logging.info("Using credentials from environment variables")
         return token, repo_url
     
     # Try dotenv file
@@ -71,7 +68,6 @@ def get_github_credentials():
         token = os.getenv("GITHUB_TOKEN")
         repo_url = os.getenv("GITHUB_REPO_URL")
         if token and repo_url:
-            logging.info("Using credentials from .env file")
             return token, repo_url
     except ImportError:
         pass
@@ -108,7 +104,6 @@ def git_sync():
         
         # 3. Initialize Git repo if needed
         if not (repo_dir / ".git").exists():
-            logging.info("Initializing new Git repository")
             subprocess.run(["git", "init"], cwd=repo_dir, check=True)
             subprocess.run(["git", "branch", "-M", "main"], cwd=repo_dir, check=True)
             subprocess.run(["git", "remote", "add", "origin", repo_url], 
@@ -126,7 +121,6 @@ def git_sync():
             check=True
         )
         if not status_result.stdout.strip():
-            logging.info("No changes to commit")
             return
         
         # 6. Commit changes
@@ -152,7 +146,6 @@ def git_sync():
                     check=True,
                     timeout=30
                 )
-                logging.info("Feedback database synced to GitHub")
                 break
             except subprocess.TimeoutExpired:
                 if attempt < max_retries - 1:
