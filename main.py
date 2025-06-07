@@ -258,8 +258,6 @@ def main():
             """)
         st.markdown(f"""
         [gna.cultura.gov.it](https://gna.cultura.gov.it/wiki/index.php/Pagina_principale)""", unsafe_allow_html=True)
-            
-        st.divider()
 
         # Add clear chat history button
         if st.button("Cancella cronologia chat"):
