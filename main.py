@@ -250,9 +250,8 @@ def main():
     st.sidebar.image("data/gna.png", width=60)
     with st.sidebar:
         st.header("Informazioni")
-        st.markdown(f"""
-        **Assistente AI per il Geoportale Nazionale Archeologia**
-        
+        st.caption("**Assistente AI per il Geoportale Nazionale Archeologia**")
+        st.markdown(f"""      
         Questo assistente virtuale utilizza tecnologie di Intelligenza Artificiale per rispondere a domande relative al Geoportale Nazionale Archeologia (GNA).
         
         Il modello è stato addestrato sul manuale operativo e sulla documentazione ufficiale del progetto, gestito dall'Istituto Centrale per il Catalogo e la Documentazione (ICCD) e disponibile a questo indirizzo:
@@ -266,12 +265,13 @@ def main():
         if st.button("Cancella cronologia chat"):
             st.session_state.chat_history = []
             st.rerun()
+
+        st.divider()
+
         st.caption("Gestione feedback")
         st.markdown("""
         Lascia un feedback sulle risposte dell'assistente per migliorare le sue prestazioni.
         """)
-
-        st.divider()
             
         # Feedback export
         if st.button("Esporta feedback"):
