@@ -20,14 +20,14 @@ load_dotenv()
 SITEMAP_PATH = 'GNA_sitemap.xml'
 BASE_DOMAIN = 'https://gna.cultura.gov.it'
 OUTPUT_FOLDER = "data"
-OUTPUT_FILENAME = "chunks_memory.json"
+OUTPUT_FILENAME = "chunks_memory_previous.json"
 OUTPUT_PATH = os.path.join(OUTPUT_FOLDER, OUTPUT_FILENAME)
 CHUNK_SIZE = 1024
 CHUNK_OVERLAP = 256
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 # --- Initialize Models and Resources ---
-nlp = spacy.load("it_core_news_lg")
+nlp = spacy.load("it_core_news_md")
 kw_model = KeyBERT()
 nltk.download('stopwords', quiet=True)
 italian_stopwords = stopwords.words('italian')

@@ -6,17 +6,16 @@ import numpy as np
 import faiss
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
-from create_chunks_dict import *
+from create_chunks_json import crawl_and_chunk, SITEMAP_PATH, BASE_DOMAIN
 import torch
 import gc
 import logging
 import time
+import json
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Environment setup
 os.environ["SPACY_WARNING_IGNORE"] = "W008"
 os.environ["NLTK_DATA"] = "/tmp/nlp_data/nltk"
 
@@ -24,6 +23,7 @@ EMBEDDING_MODEL = "intfloat/multilingual-e5-large"
 FAISS_DIR = ".faiss_db"
 FAISS_INDEX_PATH = os.path.join(FAISS_DIR, "index.faiss")
 METADATA_PATH = os.path.join(FAISS_DIR, "metadata.pkl")
+CHUNK_FILE = os.path.join("data", "chunks_memory.json")
 
 # Memory management constants
 MAX_CACHE_SIZE = 1000  # Max cached embeddings
@@ -45,6 +45,7 @@ class VectorDatabaseManager:
                 self.index = faiss.read_index(FAISS_INDEX_PATH)
                 with open(METADATA_PATH, 'rb') as f:
                     self.metadata_db = pickle.load(f)
+                logger.info("Loaded existing FAISS database")
             except Exception as e:
                 logger.error(f"Error loading database: {str(e)}")
                 self._reset_database()
@@ -61,7 +62,6 @@ class VectorDatabaseManager:
     def embedding_model(self):
         """Lazy loading of embedding model with memory management"""
         if self._embedding_model is None:
-            
             # Check GPU memory before loading
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
@@ -80,34 +80,48 @@ class VectorDatabaseManager:
             # Reduce memory footprint
             if device == 'cuda':
                 self._embedding_model.half()  # Use half precision
+                logger.info("Using half-precision model for GPU memory efficiency")
         
         return self._embedding_model
 
     def _format_chunk(self, chunk: dict) -> tuple:
         """Helper method to format chunk data for storage"""
-        text_content = " ".join([
-            chunk["title"],
-            chunk["content"]
-        ])
-
+        # Enhanced text content with headers context
+        context_str = " | ".join(chunk.get("headers_context", []))
+        text_content = f"{context_str}\n\n{chunk.get('title', '')}\n{chunk.get('content', '')}"
+        
+        # Include keywords and entities in metadata
         metadata = {
-            "source": chunk["source"],
-            "content_type": chunk["content_type"],
-            "title": chunk["title"]
+            "source": chunk.get("source", ""),
+            "content_type": chunk.get("content_type", "text"),
+            "title": chunk.get("title", ""),
+            "headers_context": chunk.get("headers_context", []),
+            "keywords": chunk.get("keywords", []),
+            "entities": chunk.get("entities", []),
+            "chunk_index": chunk.get("chunk_index", 0)
         }
 
         return chunk["chunk_id"], text_content, metadata
 
-    async def process_and_store_chunks(self, sitemap_path: str, base_domain: str):
+    async def process_and_store_chunks(self):
         """Main processing pipeline with memory management"""
         try:
-            chunks = await crawl_and_chunk(sitemap_path, base_domain)
+            # Load chunks from JSON file if available
+            if os.path.exists(CHUNK_FILE):
+                with open(CHUNK_FILE, 'r', encoding='utf-8') as f:
+                    chunks = json.load(f)
+                logger.info(f"Loaded {len(chunks)} chunks from {CHUNK_FILE}")
+            else:
+                # Generate chunks if JSON file doesn't exist
+                logger.info("No chunk JSON found, generating chunks...")
+                chunks = await crawl_and_chunk(SITEMAP_PATH, BASE_DOMAIN)
+                logger.info(f"Generated {len(chunks)} chunks")
             
             # Process chunks for storage
             ids, documents, metadatas = [], [], []
-            for chunk_id, chunk in chunks.items():
-                formatted_id, text_content, metadata = self._format_chunk(chunk)
-                ids.append(formatted_id)
+            for chunk in chunks:
+                chunk_id, text_content, metadata = self._format_chunk(chunk)
+                ids.append(chunk_id)
                 documents.append(text_content)
                 metadatas.append(metadata)
             
@@ -126,6 +140,7 @@ class VectorDatabaseManager:
                     {"id": i, "document": doc, "metadata": meta} 
                     for i, doc, meta in zip(ids, documents, metadatas)
                 ]
+                logger.info(f"Created new FAISS index with {len(ids)} vectors")
             else:
                 # Add to existing index (not efficient for large updates)
                 self.index.add(embeddings)
@@ -135,6 +150,7 @@ class VectorDatabaseManager:
                         "document": doc, 
                         "metadata": meta
                     })
+                logger.info(f"Added {len(ids)} new vectors to existing index")
             
             # Persist to disk
             self._save_to_disk()
@@ -159,6 +175,8 @@ class VectorDatabaseManager:
         # Use half precision if on GPU
         precision = torch.float16 if 'cuda' in str(self.embedding_model.device) else torch.float32
         
+        logger.info(f"Generating embeddings for {len(documents)} documents (batch size: {batch_size})")
+        
         for i in range(0, len(documents), batch_size):
             batch = documents[i:i+batch_size]
             
@@ -177,6 +195,7 @@ class VectorDatabaseManager:
             # Clean up periodically
             if (i // batch_size) % 10 == 0:
                 self._clear_memory()
+                logger.debug(f"Processed {i+len(batch)}/{len(documents)} embeddings")
         
         # Concatenate and return
         return np.vstack(all_embeddings)
@@ -187,7 +206,7 @@ class VectorDatabaseManager:
             faiss.write_index(self.index, FAISS_INDEX_PATH)
             with open(METADATA_PATH, 'wb') as f:
                 pickle.dump(self.metadata_db, f, protocol=pickle.HIGHEST_PROTOCOL)
-            logger.info("Database saved to disk")
+            logger.info(f"Database saved to {FAISS_DIR}")
         except Exception as e:
             logger.error(f"Error saving database: {str(e)}")
 
@@ -221,18 +240,27 @@ class VectorDatabaseManager:
             # Search FAISS index
             scores, indices = self.index.search(query_embedding, top_k)
             
-            # Format results
+            # Format results with enhanced context
             results = []
             for i, score in zip(indices[0], scores[0]):
                 if i < 0:  # FAISS returns -1 for invalid indices
                     continue
                 try:
                     item = self.metadata_db[i]
+                    # Create enhanced context string
+                    context_str = " → ".join(item["metadata"].get("headers_context", []))
+                    content_preview = (
+                        f"[Context: {context_str}]\n"
+                        f"{item['document'][:500]}..."
+                    )
+                    
                     results.append({
                         "score": float(score),
-                        "title": item["metadata"]["title"],
-                        "source": item["metadata"]["source"],
-                        "content": item["document"][:200] + "..." if item["document"] else ""
+                        "title": item["metadata"].get("title", ""),
+                        "source": item["metadata"].get("source", ""),
+                        "content_type": item["metadata"].get("content_type", "text"),
+                        "content": content_preview,
+                        "full_metadata": item["metadata"]
                     })
                 except IndexError:
                     logger.warning(f"Invalid index {i} in metadata database")
@@ -270,24 +298,11 @@ class VectorDatabaseManager:
                 except Exception as e:
                     logger.warning(f"Error moving model to CPU: {str(e)}")
             
-            # Reset database references
-            self.index = None
-            self.metadata_db = []
-            
-            # Reload from disk if available
-            if os.path.exists(FAISS_INDEX_PATH) and os.path.exists(METADATA_PATH):
-                try:
-                    self.index = faiss.read_index(FAISS_INDEX_PATH)
-                    with open(METADATA_PATH, 'rb') as f:
-                        self.metadata_db = pickle.load(f)
-                    logger.info("Reloaded database from disk")
-                except Exception as e:
-                    logger.error(f"Error reloading database: {str(e)}")
-                    self._reset_database()
-        
-        # Force garbage collection
-        gc.collect()
-        logger.info("Cache cleared")
+            # Force garbage collection
+            gc.collect()
+            logger.info("Full cache clearance completed")
+        else:
+            logger.info("Partial cache clearance completed")
 
     def _clear_memory(self):
         """Release temporary memory resources"""
@@ -309,25 +324,24 @@ async def main():
     # Initialize vector database manager
     db_manager = VectorDatabaseManager()
 
-    # Process and store chunks only if no existing database
-    if not db_manager.metadata_db:
-        await db_manager.process_and_store_chunks(SITEMAP_PATH, BASE_DOMAIN)
-    else:
-        print("Using existing FAISS database")
+    # Process and store chunks (will load from JSON if available)
+    await db_manager.process_and_store_chunks()
 
     # Example query
     results = db_manager.query(
-        "Esempi di implementazione pratica durante la fase iniziale"
+        "Quali sono le differenze tra OGD e OGT?",
+        top_k=3
     )
 
     # Display results
     print("\nTop results:")
     for i, result in enumerate(results, 1):
-        print(f"\nResult {i}:")
+        print(f"\n--- RESULT {i} ---")
         print(f"Title: {result.get('title')}")
         print(f"Source: {result.get('source')}")
-        print(f"Relevance: {result.get('score'):.2%}" if result.get('score') is not None else "N/A")
-        print(f"Content: {result.get('content')}")
+        print(f"Content type: {result.get('content_type')}")
+        print(f"Relevance: {result.get('score'):.2%}")
+        print(f"Content preview:\n{result.get('content')}")
 
 if __name__ == "__main__":
     asyncio.run(main())
