@@ -85,6 +85,7 @@ def git_sync():
         
     try:
         repo_dir = Path(__file__).parent
+        auth_repo_url = repo_url.replace("https://", f"https://{token}@")
         
         # 1. Handle Git lock file if it exists
         lock_file = repo_dir / ".git" / "index.lock"
@@ -109,10 +110,21 @@ def git_sync():
             subprocess.run(["git", "remote", "add", "origin", repo_url], 
                           cwd=repo_dir, check=True)
         
-        # 4. Stage changes
+        # 4. Pull latest changes first (to minimize conflicts)
+        try:
+            subprocess.run(
+                ["git", "pull", auth_repo_url, "main", "--rebase"],
+                cwd=repo_dir,
+                check=True,
+                timeout=30
+            )
+        except subprocess.CalledProcessError as e:
+            logging.warning(f"Initial pull failed: {e}. Proceeding with local changes.")
+        
+        # 5. Stage changes
         subprocess.run(["git", "add", str(FEEDBACK_DB)], cwd=repo_dir, check=True)
         
-        # 5. Check for changes
+        # 6. Check for changes
         status_result = subprocess.run(
             ["git", "status", "--porcelain"],
             cwd=repo_dir,
@@ -123,18 +135,9 @@ def git_sync():
         if not status_result.stdout.strip():
             return
         
-        # 6. Commit changes
+        # 7. Commit changes
         commit_message = f"Feedback update {datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
-        subprocess.run(
-                    ["git", "pull", auth_repo_url, "main"],
-                    cwd=repo_dir,
-                    check=True,
-                    timeout=30
-                )
         subprocess.run(["git", "commit", "-m", commit_message], cwd=repo_dir, check=True)
-        
-        # 7. Push with token authentication
-        auth_repo_url = repo_url.replace("https://", f"https://{token}@")
         
         # 8. Push with retry logic
         max_retries = 2
