@@ -373,7 +373,7 @@ async def process_page(client: httpx.AsyncClient, url: str, base_domain: str, oc
     chunks = await asyncio.to_thread(create_semantic_chunks, page_data)
     final_chunks = []
 
-    # Process image references with OCR
+    # Process images with OCR
     for chunk in chunks:
         if isinstance(chunk, dict) and chunk.get('type') == 'image_reference':
             img_data = chunk['image_data']
