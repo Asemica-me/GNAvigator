@@ -1,6 +1,5 @@
 import asyncio
 import os
-import shutil
 import pickle
 import numpy as np
 import faiss
@@ -12,10 +11,14 @@ import gc
 import logging
 import time
 import json
+from tqdm import tqdm
 
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Environment setup
+load_dotenv()
 os.environ["SPACY_WARNING_IGNORE"] = "W008"
 os.environ["NLTK_DATA"] = "/tmp/nlp_data/nltk"
 
@@ -23,12 +26,13 @@ EMBEDDING_MODEL = "intfloat/multilingual-e5-large"
 FAISS_DIR = ".faiss_db"
 FAISS_INDEX_PATH = os.path.join(FAISS_DIR, "index.faiss")
 METADATA_PATH = os.path.join(FAISS_DIR, "metadata.pkl")
-CHUNK_FILE = os.path.join("data", "chunks_memory.json")
+CHUNK_JSON_PATH = "data/chunks_memory.json"
+EMBEDDINGS_CACHE_PATH = os.path.join(FAISS_DIR, "embeddings_cache.npy")
 
-# Memory management constants
-MAX_CACHE_SIZE = 1000  # Max cached embeddings
-CLEANUP_INTERVAL = 10  # Cleanup every 10 queries
-GPU_CACHE_THRESHOLD = 80  # GPU memory usage threshold for offloading
+# Memory management
+MAX_CACHE_SIZE = 1000
+CLEANUP_INTERVAL = 10
+GPU_CACHE_THRESHOLD = 80
 
 class VectorDatabaseManager:
     def __init__(self):
@@ -54,43 +58,50 @@ class VectorDatabaseManager:
             os.makedirs(FAISS_DIR, exist_ok=True)
 
     def _reset_database(self):
-        """Initialize empty database state"""
         self.index = None
         self.metadata_db = []
 
     @property
     def embedding_model(self):
-        """Lazy loading of embedding model with memory management"""
         if self._embedding_model is None:
-            # Check GPU memory before loading
+            # Check if we have cached embeddings
+            if os.path.exists(EMBEDDINGS_CACHE_PATH):
+                logger.info("Found precomputed embeddings cache")
+                return None
+                
+            # Device selection with memory awareness
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
+                total_mem = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
                 free_mem = torch.cuda.mem_get_info()[0] / (1024 ** 3)
-                if free_mem < 2:  # Less than 2GB free
-                    logger.warning(f"Low GPU memory ({free_mem:.1f}GB free), using CPU")
+                
+                if free_mem < 2 or total_mem < 8:  # Less than 2GB free or small GPU
+                    logger.warning(f"Low GPU memory ({free_mem:.1f}GB free of {total_mem:.1f}GB), using CPU")
                     device = 'cpu'
                 else:
                     device = 'cuda'
+                    logger.info(f"Using GPU with {free_mem:.1f}GB free memory")
             else:
                 device = 'cpu'
+                logger.info("Using CPU for embeddings")
             
+            # Only load model if we need to compute embeddings
             self._embedding_model = SentenceTransformer(EMBEDDING_MODEL, device=device)
-            self._embedding_model.eval()  # Disable dropout layers
+            self._embedding_model.eval()
             
-            # Reduce memory footprint
             if device == 'cuda':
-                self._embedding_model.half()  # Use half precision
-                logger.info("Using half-precision model for GPU memory efficiency")
+                try:
+                    self._embedding_model.half()
+                    logger.info("Using half-precision model for GPU efficiency")
+                except Exception:
+                    logger.warning("Couldn't convert to half precision, using full precision")
         
         return self._embedding_model
 
     def _format_chunk(self, chunk: dict) -> tuple:
-        """Helper method to format chunk data for storage"""
-        # Enhanced text content with headers context
         context_str = " | ".join(chunk.get("headers_context", []))
         text_content = f"{context_str}\n\n{chunk.get('title', '')}\n{chunk.get('content', '')}"
         
-        # Include keywords and entities in metadata
         metadata = {
             "source": chunk.get("source", ""),
             "content_type": chunk.get("content_type", "text"),
@@ -104,20 +115,18 @@ class VectorDatabaseManager:
         return chunk["chunk_id"], text_content, metadata
 
     async def process_and_store_chunks(self):
-        """Main processing pipeline with memory management"""
         try:
-            # Load chunks from JSON file if available
-            if os.path.exists(CHUNK_FILE):
-                with open(CHUNK_FILE, 'r', encoding='utf-8') as f:
+            # Load chunks from JSON
+            if os.path.exists(CHUNK_JSON_PATH):
+                with open(CHUNK_JSON_PATH, 'r', encoding='utf-8') as f:
                     chunks = json.load(f)
-                logger.info(f"Loaded {len(chunks)} chunks from {CHUNK_FILE}")
+                logger.info(f"Loaded {len(chunks)} chunks from {CHUNK_JSON_PATH}")
             else:
-                # Generate chunks if JSON file doesn't exist
                 logger.info("No chunk JSON found, generating chunks...")
                 chunks = await crawl_and_chunk(SITEMAP_PATH, BASE_DOMAIN)
                 logger.info(f"Generated {len(chunks)} chunks")
             
-            # Process chunks for storage
+            # Prepare data for storage
             ids, documents, metadatas = [], [], []
             for chunk in chunks:
                 chunk_id, text_content, metadata = self._format_chunk(chunk)
@@ -125,24 +134,33 @@ class VectorDatabaseManager:
                 documents.append(text_content)
                 metadatas.append(metadata)
             
-            # Generate embeddings in batches with memory management
-            embeddings = self._generate_embeddings_with_memory_management(documents)
+            # Check for embeddings cache
+            if os.path.exists(EMBEDDINGS_CACHE_PATH):
+                logger.info("Loading embeddings from cache")
+                embeddings = np.load(EMBEDDINGS_CACHE_PATH)
+            else:
+                # Generate embeddings only if needed
+                model = self.embedding_model
+                if model:
+                    embeddings = self._generate_embeddings_efficiently(documents)
+                    # Cache embeddings for future runs
+                    np.save(EMBEDDINGS_CACHE_PATH, embeddings)
+                    logger.info(f"Saved embeddings cache to {EMBEDDINGS_CACHE_PATH}")
+                else:
+                    logger.error("No embedding model available and no cache found")
+                    return
             
             # Create or update FAISS index
             if self.index is None:
-                # Initialize new index
                 dimension = embeddings.shape[1]
-                self.index = faiss.IndexFlatIP(dimension)  # Inner product for cosine similarity
+                self.index = faiss.IndexFlatIP(dimension)
                 self.index.add(embeddings)
-                
-                # Create metadata database
                 self.metadata_db = [
                     {"id": i, "document": doc, "metadata": meta} 
                     for i, doc, meta in zip(ids, documents, metadatas)
                 ]
                 logger.info(f"Created new FAISS index with {len(ids)} vectors")
             else:
-                # Add to existing index (not efficient for large updates)
                 self.index.add(embeddings)
                 for i, doc, meta in zip(ids, documents, metadatas):
                     self.metadata_db.append({
@@ -154,9 +172,8 @@ class VectorDatabaseManager:
             
             # Persist to disk
             self._save_to_disk()
-            logger.info(f"FAISS database stored in: {os.path.abspath(FAISS_DIR)}")
             
-            # Clean up memory
+            # Clean up
             del embeddings, chunks
             self._clear_memory()
             
@@ -164,25 +181,34 @@ class VectorDatabaseManager:
             logger.error(f"Processing failed: {str(e)}")
             raise
         finally:
-            # Ensure resources are released
             self._clear_memory()
 
-    def _generate_embeddings_with_memory_management(self, documents: list) -> np.ndarray:
-        """Generate embeddings with memory constraints"""
-        batch_size = 32
+    def _generate_embeddings_efficiently(self, documents: list) -> np.ndarray:
+        """Optimized embedding generation with batching and memory management"""
+        # Determine optimal batch size based on hardware
+        if torch.cuda.is_available():
+            batch_size = 128  # Larger batches for GPU
+            precision = torch.float16
+            logger.info("Using GPU-optimized embedding generation")
+        else:
+            # Optimize for CPU with parallel processing
+            batch_size = 64
+            precision = torch.float32
+            torch.set_num_threads(os.cpu_count() or 4)
+            logger.info(f"Using CPU with {torch.get_num_threads()} threads")
+        
         all_embeddings = []
+        total_batches = (len(documents) + batch_size - 1) // batch_size
         
-        # Use half precision if on GPU
-        precision = torch.float16 if 'cuda' in str(self.embedding_model.device) else torch.float32
-        
-        logger.info(f"Generating embeddings for {len(documents)} documents (batch size: {batch_size})")
+        # Use progress bar for visibility
+        pbar = tqdm(total=len(documents), desc="Generating embeddings", unit="doc")
         
         for i in range(0, len(documents), batch_size):
             batch = documents[i:i+batch_size]
             
-            # Generate embeddings
+            # Generate embeddings with automatic mixed precision
             with torch.no_grad(), torch.cuda.amp.autocast(enabled=(precision==torch.float16)):
-                batch_embeddings = self.embedding_model.encode(
+                batch_embeddings = self._embedding_model.encode(
                     batch,
                     convert_to_numpy=True,
                     normalize_embeddings=True,
@@ -191,17 +217,16 @@ class VectorDatabaseManager:
                 )
             
             all_embeddings.append(batch_embeddings)
+            pbar.update(len(batch))
             
-            # Clean up periodically
-            if (i // batch_size) % 10 == 0:
+            # Memory management
+            if i > 0 and i % (10 * batch_size) == 0:
                 self._clear_memory()
-                logger.debug(f"Processed {i+len(batch)}/{len(documents)} embeddings")
         
-        # Concatenate and return
+        pbar.close()
         return np.vstack(all_embeddings)
 
     def _save_to_disk(self):
-        """Save index and metadata to disk"""
         try:
             faiss.write_index(self.index, FAISS_INDEX_PATH)
             with open(METADATA_PATH, 'wb') as f:
@@ -211,43 +236,43 @@ class VectorDatabaseManager:
             logger.error(f"Error saving database: {str(e)}")
 
     def query(self, question: str, top_k: int = 5) -> list:
-        """Perform similarity search with memory management"""
         try:
-            # Check if we need to cleanup
+            # Query management
             self.query_count += 1
-            if self.query_count >= CLEANUP_INTERVAL or time.time() - self.last_cleanup > 300:
+            if self.query_count >= CLEANUP_INTERVAL:
                 self.clear_cache()
                 self.query_count = 0
-                self.last_cleanup = time.time()
             
-            # Check for cached embedding
+            # Use cached embeddings if available
             if question in self._cached_embeddings:
-                logger.debug(f"Using cached embedding for: {question[:20]}...")
                 query_embedding = self._cached_embeddings[question]
             else:
-                # Generate query embedding
-                with torch.no_grad():
-                    query_embedding = self.embedding_model.encode(
-                        [question], 
-                        convert_to_numpy=True,
-                        normalize_embeddings=True
-                    )
+                # Use a smaller model for query encoding if available
+                if self._embedding_model:
+                    with torch.no_grad():
+                        query_embedding = self._embedding_model.encode(
+                            [question], 
+                            convert_to_numpy=True,
+                            normalize_embeddings=True
+                        )
+                else:
+                    # Fallback to querying with a smaller model
+                    query_model = SentenceTransformer("intfloat/multilingual-e5-small")
+                    query_embedding = query_model.encode([question], convert_to_numpy=True)
                 
-                # Cache embedding
                 if len(self._cached_embeddings) < MAX_CACHE_SIZE:
                     self._cached_embeddings[question] = query_embedding
             
             # Search FAISS index
             scores, indices = self.index.search(query_embedding, top_k)
             
-            # Format results with enhanced context
+            # Format results
             results = []
             for i, score in zip(indices[0], scores[0]):
-                if i < 0:  # FAISS returns -1 for invalid indices
+                if i < 0:
                     continue
                 try:
                     item = self.metadata_db[i]
-                    # Create enhanced context string
                     context_str = " → ".join(item["metadata"].get("headers_context", []))
                     content_preview = (
                         f"[Context: {context_str}]\n"
@@ -271,60 +296,31 @@ class VectorDatabaseManager:
             logger.error(f"Query failed: {str(e)}")
             return []
         finally:
-            # Clean up after each query
             self._clear_memory()
 
     def clear_cache(self, full: bool = False):
-        """Release memory resources"""
         logger.info("Clearing vector store cache")
         
-        # Clear GPU memory
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         
-        # Clear cached embeddings
         self._cached_embeddings.clear()
         
-        # Clear intermediate objects
-        if hasattr(self, '_batch_embeddings'):
-            del self._batch_embeddings
+        if full and self._embedding_model:
+            try:
+                self._embedding_model = self._embedding_model.to('cpu')
+            except Exception as e:
+                logger.warning(f"Error moving model to CPU: {str(e)}")
         
-        # Full cleanup
-        if full:
-            # Move model to CPU to free GPU memory
-            if self._embedding_model is not None:
-                try:
-                    self._embedding_model = self._embedding_model.to('cpu')
-                except Exception as e:
-                    logger.warning(f"Error moving model to CPU: {str(e)}")
-            
-            # Force garbage collection
-            gc.collect()
-            logger.info("Full cache clearance completed")
-        else:
-            logger.info("Partial cache clearance completed")
-
-    def _clear_memory(self):
-        """Release temporary memory resources"""
-        # Clear GPU cache if available
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        
-        # Clear Python garbage
         gc.collect()
 
-    def __del__(self):
-        """Destructor to clean up resources"""
-        try:
-            self.clear_cache(full=True)
-        except Exception:
-            pass
+    def _clear_memory(self):
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
 
 async def main():
-    # Initialize vector database manager
     db_manager = VectorDatabaseManager()
-
-    # Process and store chunks (will load from JSON if available)
     await db_manager.process_and_store_chunks()
 
     # Example query
@@ -333,7 +329,6 @@ async def main():
         top_k=3
     )
 
-    # Display results
     print("\nTop results:")
     for i, result in enumerate(results, 1):
         print(f"\n--- RESULT {i} ---")

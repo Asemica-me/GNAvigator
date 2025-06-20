@@ -3,114 +3,199 @@ import logging
 import subprocess
 import os
 import json
-from datetime import datetime
+import time
+import sys
 
-# Configuration
-SITEMAP_PATH = "sitemap/sitemap.xml"
-CHUNKS_PATH = "chunks/chunks.json"
-VECTOR_STORE_PATH = "vector_store"
-LOG_FILE = f"logs/preprocess_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Configuration using os.path
+SITEMAP_DIR = os.path.join(SCRIPT_DIR, "sitemap")
+SITEMAP_PATH = os.path.join(SITEMAP_DIR, "GNA__sitemap.xml") 
+CHUNKS_DIR = os.path.join(SCRIPT_DIR, "data")
+CHUNKS_PATH = os.path.join(CHUNKS_DIR, "chunks_memory.json")
+FAISS_DIR = os.path.join(SCRIPT_DIR, ".faiss_db")
+REQUIRED_FAISS_FILES = ["index.faiss", "metadata.pkl"]
 
 def setup_logging():
-    """Configure logging system"""
-    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
-    logging.basicConfig(
-        filename=LOG_FILE,
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    console = logging.StreamHandler()
-    console.setLevel(logging.INFO)
-    logging.getLogger('').addHandler(console)
+    """Configure logging to console only"""
+    logger = logging.getLogger('preprocessor')
+    logger.setLevel(logging.INFO)
+    
+    # Console handler logging
+    console_handler = logging.StreamHandler()
+    console_formatter = logging.Formatter('%(levelname)s - %(message)s')
+    console_handler.setFormatter(console_formatter)
+    
+    logger.addHandler(console_handler)
+    return logger
 
-def run_sitemap_generator():
+def get_venv_python():
+    """Get the correct Python executable path for the virtual environment"""
+    if os.name == 'nt':  # Windows
+        return os.path.join(SCRIPT_DIR, ".venv", "Scripts", "python.exe")
+    else:  # Linux/Mac
+        return os.path.join(SCRIPT_DIR, ".venv", "bin", "python")
+
+def run_sitemap_generator(logger):
     """Run sitemap generation script"""
-    logging.info("Starting sitemap generation...")
+    logger.info("Starting sitemap generation...")
+    start_time = time.time()
+    
+    # Create sitemap directory if needed
+    os.makedirs(SITEMAP_DIR, exist_ok=True)
+    
+    script_path = os.path.join(SCRIPT_DIR, "generate_sitemap.py")
+    venv_python = get_venv_python()
+    
+    # Create environment with activated virtualenv
+    env = os.environ.copy()
+    env["PATH"] = os.path.dirname(venv_python) + os.pathsep + env["PATH"]
+    
     result = subprocess.run(
-        ["python", "generate_sitemap.py"],
+        [venv_python, script_path],
         capture_output=True,
-        text=True
+        text=True,
+        env=env
     )
     
+    duration = time.time() - start_time
+    
     if result.returncode != 0:
-        logging.error(f"Sitemap generation failed: {result.stderr}")
+        logger.error(f"Sitemap generation failed in {duration:.2f}s")
+        logger.error(f"Error details: {result.stderr}")
         raise RuntimeError("Sitemap generation failed")
     
-    logging.info(f"Sitemap generated successfully at {SITEMAP_PATH}")
-    logging.info(f"Output: {result.stdout}")
+    # Verify sitemap was created
+    if not os.path.exists(SITEMAP_PATH):
+        logger.error(f"Expected sitemap not found at {SITEMAP_PATH}")
+        logger.info(f"Files in sitemap directory: {os.listdir(SITEMAP_DIR)}")
+        raise FileNotFoundError("Sitemap file not created")
+    
+    logger.info(f"Sitemap generated in {duration:.2f}s")
 
-def run_chunking():
+def run_chunking(logger):
     """Run chunk creation script"""
-    logging.info("Starting chunk creation...")
+    logger.info("Starting chunk creation...")
+    start_time = time.time()
+    
+    # Create chunks directory if needed
+    os.makedirs(CHUNKS_DIR, exist_ok=True)
+    
+    script_path = os.path.join(SCRIPT_DIR, "create_chunks_json.py")
+    venv_python = get_venv_python()
+    
+    # Create environment with activated virtualenv
+    env = os.environ.copy()
+    env["PATH"] = os.path.dirname(venv_python) + os.pathsep + env["PATH"]
+    
     result = subprocess.run(
-        ["python", "create_chunks_json.py", SITEMAP_PATH, CHUNKS_PATH],
+        [venv_python, script_path],
         capture_output=True,
-        text=True
+        text=True,
+        env=env
     )
     
+    duration = time.time() - start_time
+    
     if result.returncode != 0:
-        logging.error(f"Chunk creation failed: {result.stderr}")
+        logger.error(f"Chunk creation failed in {duration:.2f}s")
+        logger.error(f"Error details: {result.stderr}")
         raise RuntimeError("Chunk creation failed")
     
-    logging.info(f"Chunks created successfully at {CHUNKS_PATH}")
-    logging.info(f"Output: {result.stdout}")
+    # Check if chunks were created
+    if not os.path.exists(CHUNKS_PATH):
+        logger.error(f"Chunks file not found at {CHUNKS_PATH}")
+        raise FileNotFoundError("Chunks file not created")
+    
+    logger.info(f"Created chunks in {duration:.2f}s")
 
-def run_vector_store_creator():
+def run_vector_store_creator(logger):
     """Run vector store creation script"""
-    logging.info("Starting vector store creation...")
+    logger.info("Starting vector store creation...")
+    start_time = time.time()
+    
+    # Create vector store directory if needed
+    os.makedirs(FAISS_DIR, exist_ok=True)
+    
+    script_path = os.path.join(SCRIPT_DIR, "vector_store.py")
+    venv_python = get_venv_python()
+    
+    # Create environment with activated virtualenv
+    env = os.environ.copy()
+    env["PATH"] = os.path.dirname(venv_python) + os.pathsep + env["PATH"]
+    
     result = subprocess.run(
-        ["python", "vector_store.py", CHUNKS_PATH, VECTOR_STORE_PATH],
+        [venv_python, script_path],
         capture_output=True,
-        text=True
+        text=True,
+        env=env
     )
     
+    duration = time.time() - start_time
+    
     if result.returncode != 0:
-        logging.error(f"Vector store creation failed: {result.stderr}")
+        logger.error(f"Vector store creation failed in {duration:.2f}s")
+        logger.error(f"Error details: {result.stderr}")
         raise RuntimeError("Vector store creation failed")
     
-    logging.info(f"Vector store created successfully at {VECTOR_STORE_PATH}")
-    logging.info(f"Output: {result.stdout}")
+    logger.info(f"Vector store created in {duration:.2f}s")
 
-def validate_outputs():
+def validate_outputs(logger):
     """Validate pipeline outputs"""
-    logging.info("Validating outputs...")
+    logger.info("Validating outputs...")
     
     # Validate sitemap exists
     if not os.path.exists(SITEMAP_PATH):
         raise FileNotFoundError(f"Sitemap not found at {SITEMAP_PATH}")
     
-    # Validate chunks file exists and is valid JSON
-    with open(CHUNKS_PATH, 'r') as f:
-        try:
-            chunks = json.load(f)
-            if not isinstance(chunks, list) or len(chunks) == 0:
-                raise ValueError("Invalid chunks format")
-        except json.JSONDecodeError:
-            raise ValueError("Invalid JSON in chunks file")
+    # Validate chunks file exists
+    if not os.path.exists(CHUNKS_PATH):
+        raise FileNotFoundError(f"Chunks file not found at {CHUNKS_PATH}")
     
-    # Validate vector store directory
-    if not os.path.exists(VECTOR_STORE_PATH):
-        raise FileNotFoundError(f"Vector store not found at {VECTOR_STORE_PATH}")
-    if not os.listdir(VECTOR_STORE_PATH):
-        raise ValueError("Vector store directory is empty")
+    # Validate vector store directory exists
+    if not os.path.exists(FAISS_DIR):
+        raise FileNotFoundError(f"Vector store not found at {FAISS_DIR}")
     
-    logging.info("All outputs validated successfully")
+    # Check for required vector store files
+    missing_files = []
+    for file in REQUIRED_FAISS_FILES:
+        path = os.path.join(FAISS_DIR, file)
+        if not os.path.exists(path):
+            missing_files.append(file)
+    
+    if missing_files:
+        raise FileNotFoundError(
+            f"Vector store files missing: {', '.join(missing_files)}"
+        )
+    
+    logger.info("All outputs validated successfully")
 
 def main():
     """Main preprocess pipeline execution"""
+    logger = setup_logging()
+    
     try:
-        setup_logging()
-        logging.info("Starting preprocessing pipeline")
+        logger.info("Starting preprocessing pipeline")
+        pipeline_start = time.time()
         
-        run_sitemap_generator()
-        run_chunking()
-        run_vector_store_creator()
-        validate_outputs()
+        # Step 1: Generate sitemap
+        run_sitemap_generator(logger)
         
-        logging.info("Preprocessing pipeline completed successfully")
+        # Step 2: Create chunks
+        run_chunking(logger)
+        
+        # Step 3: Create vector store
+        run_vector_store_creator(logger)
+        
+        # Step 4: Validate outputs
+        validate_outputs(logger)
+        
+        total_time = time.time() - pipeline_start
+        logger.info(f"Preprocessing pipeline completed in {total_time:.2f} seconds")
+        
     except Exception as e:
-        logging.exception("Pipeline failed with error")
-        raise
+        logger.error(f"Pipeline failed: {str(e)}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
