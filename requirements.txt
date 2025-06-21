@@ -19,3 +19,4 @@ requests
 backoff
 faiss-cpu
 gitpython
+aiohttp
