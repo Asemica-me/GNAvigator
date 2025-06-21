@@ -8,11 +8,10 @@ import logging
 import gc
 import pandas as pd
 import re
-from concurrent.futures import ThreadPoolExecutor
+import concurrent.futures
 from feedback_handling import init_db, git_sync, save_feedback, export_feedbacks, FEEDBACK_DB
 init_db()
-from llm_handler import RAGOrchestrator
-import json
+from llm_handler import *
 
 # --- Critical Dependencies Setup ---
 # Create directories first (runs once per session)
@@ -223,28 +222,33 @@ def main():
                     if "raw_answer" not in msg  # Exclude assistant's raw answer
                 ]
                 
+                # Async-safe execution
+                async def run_query():
+                    return await orchestrator.query(
+                        question=prompt,
+                        chat_history=llm_history,
+                        top_k=5
+                    )
+                
+                # Run query with proper async handling
                 def execute_query():
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
                     try:
-                        return loop.run_until_complete(orchestrator.query(
-                            question=prompt,
-                            chat_history=llm_history,
-                            top_k=5
-                        ))
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        return loop.run_until_complete(run_query())
                     finally:
                         loop.close()
                 
-                # Execute in a separate thread
-                with ThreadPoolExecutor(max_workers=1) as executor:
-                    response = executor.submit(execute_query).result()
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(execute_query)
+                    response = future.result()
                 
                 source_map = response.get("sources", {})
                 raw_answer = response["answer"]
                 formatted_answer = format_answer_with_links(raw_answer, source_map)
                 
             except Exception as e:
-                logging.exception("Query failed")
+                logging.exception("Query failed")  # Log full traceback
                 error_msg = f"Si è verificato un errore durante l'elaborazione: {type(e).__name__}\n\n{str(e)}"
                 raw_answer = error_msg
                 formatted_answer = error_msg 
@@ -312,17 +316,9 @@ def main():
     # --- Cleanup on exit ---
     try:
         if hasattr(orchestrator, 'close'):
-            # Create a simple async close function
-            async def async_close():
-                await orchestrator.close()
-            
-            # Run in a dedicated event loop
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            try:
-                loop.run_until_complete(async_close())
-            finally:
-                loop.close()
+            loop.run_until_complete(orchestrator.close())
     except Exception as e:
         logging.error(f"Cleanup failed: {str(e)}")
 
