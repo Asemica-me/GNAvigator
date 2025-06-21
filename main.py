@@ -11,7 +11,8 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from feedback_handling import init_db, git_sync, save_feedback, export_feedbacks, FEEDBACK_DB
 init_db()
-from llm_handler import *
+from llm_handler import RAGOrchestrator
+import json
 
 # --- Critical Dependencies Setup ---
 # Create directories first (runs once per session)

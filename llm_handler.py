@@ -146,31 +146,74 @@ class MistralLLM:
         async with self.semaphore:
             try:
                 messages = self._build_rag_prompt(question, context, chat_history)
-                stream = await self.client.chat.stream_async(
-                    model=self.model_name,
-                    messages=messages,
-                    temperature=temperature or self.temperature,
-                    max_tokens=self.max_tokens
-                )
-
-                collected_messages = []
-                async for chunk in stream:
-                    if chunk.data.choices[0].delta.content:
-                        collected_messages.append(chunk.data.choices[0].delta.content)
                 
-                response = "".join(collected_messages).strip()
-                # Validate citations against number of unique sources
-                return self._validate_citations(response, len(context))
+                # Convert messages to Mistral API format
+                api_messages = []
+                for msg in messages:
+                    if isinstance(msg, SystemMessage):
+                        api_messages.append({"role": "system", "content": msg.content})
+                    else:
+                        api_messages.append({"role": "user", "content": msg.content})
+                
+                # Using the Mistral API directly with aiohttp
+                async with self.client.post(
+                    "https://api.mistral.ai/v1/chat/completions",
+                    json={
+                        "model": self.model_name,
+                        "messages": api_messages,
+                        "temperature": temperature or self.temperature,
+                        "max_tokens": self.max_tokens,
+                        "stream": True
+                    }
+                ) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        raise RuntimeError(f"API error {response.status}: {error_text}")
+                    
+                    collected_messages = []
+                    async for chunk in response.content.iter_any():
+                        if chunk:
+                            decoded_chunk = chunk.decode('utf-8')
+                            for line in decoded_chunk.split('\n'):
+                                if line.startswith('data:'):
+                                    data = line[5:].strip()
+                                    if data != '[DONE]':
+                                        try:
+                                            json_data = json.loads(data)
+                                            if 'choices' in json_data and len(json_data['choices']) > 0:
+                                                content = json_data['choices'][0]['delta'].get('content', '')
+                                                if content:
+                                                    collected_messages.append(content)
+                                        except json.JSONDecodeError:
+                                            logger.warning("Invalid JSON chunk")
+                    
+                    response_text = "".join(collected_messages).strip()
+                    return self._validate_citations(response_text, len(context))
 
             except Exception as e:
                 logger.error(f"Generation failed: {str(e)}")
-                # Clear client on error to force reconnect
-                self.clear_cache()
+                # Reinitialize client on error
+                await self.initialize_client()
                 raise
             finally:
                 # Clean up intermediate resources
-                del messages, stream
+                del messages
                 gc.collect()
+
+    def clear_cache(self):
+        """Release client resources and reset connection"""
+        if self.client:
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(self.client.close())
+                else:
+                    loop.run_until_complete(self.client.close())
+            except Exception as e:
+                logger.warning(f"Error closing Mistral client: {str(e)}")
+            finally:
+                self.client = None
+        logger.info("MistralLLM cache cleared")
 
     def _validate_citations(self, response: str, context_size: int) -> str:
         """Ensure citations reference valid sources"""
@@ -276,18 +319,23 @@ class RAGOrchestrator:
                 "question": question,
                 "answer": answer,
                 "sources": source_map,
-                "context": context_chunks,
-                "updated_history": self._update_history(chat_history, question, answer) 
+                "context": context_chunks
             }
             
         except Exception as e:
-            logger.error(f"Query failed: {e}")
+            logger.error(f"Query failed: {str(e)}")
             # Force cleanup on error
             self.clear_cache(full=True)
-            raise
+            return {
+                "question": question,
+                "answer": f"Error processing request: {str(e)}",
+                "sources": {},
+                "context": []
+            }
         finally:
             # Clean up intermediate resources
-            del context_chunks
+            if 'context_chunks' in locals():
+                del context_chunks
             gc.collect()
 
     def _update_history(
