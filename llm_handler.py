@@ -17,7 +17,7 @@ class MistralLLM:
     def __init__(
         self,
         api_key: str,
-        model_name: str = "mistral-small",
+        model_name: str = os.getenv("GEN_MODEL"),
         temperature: float = 0.3,
         max_tokens: int = 2000,
         max_concurrency: int = 5
@@ -139,23 +139,18 @@ class MistralLLM:
 
     def clear_cache(self):
         """Release client resources"""
-        async def close_client():
-            if self.client:
-                try:
-                    await self.client.close()
-                except Exception as e:
-                    logger.warning(f"Error closing client: {str(e)}")
-                finally:
-                    self.client = None
-        
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(close_client())
-            else:
-                loop.run_until_complete(close_client())
-        except Exception:
-            pass
+        if self.client:
+            try:
+                # Create a new event loop for cleanup
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(self.client.close())
+            except Exception as e:
+                logger.warning(f"Error closing client: {str(e)}")
+            finally:
+                self.client = None
+                if loop:
+                    loop.close()
         
         logger.info("MistralLLM cache cleared")
 
@@ -181,13 +176,19 @@ class RAGOrchestrator:
         self._llm = None
         self.last_cleanup = time.time()
         self.query_count = 0
+        self.embedding_model = os.getenv("EMBEDDING_MODEL")
 
     @property
     def vector_db(self):
         """Lazy initialization of vector database"""
         if self._vector_db is None:
+            from vector_store import VectorDatabaseManager
             self._vector_db = VectorDatabaseManager()
+            # Override embedding model if specified
+            if hasattr(self._vector_db, 'embedding_model'):
+                self._vector_db.embedding_model = self.embedding_model
         return self._vector_db
+    
 
     @property
     def llm(self):

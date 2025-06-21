@@ -312,16 +312,17 @@ def main():
     # --- Cleanup on exit ---
     try:
         if hasattr(orchestrator, 'close'):
-            def close_orchestrator():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    loop.run_until_complete(orchestrator.close())
-                finally:
-                    loop.close()
+            # Create a simple async close function
+            async def async_close():
+                await orchestrator.close()
             
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                executor.submit(close_orchestrator).result()
+            # Run in a dedicated event loop
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(async_close())
+            finally:
+                loop.close()
     except Exception as e:
         logging.error(f"Cleanup failed: {str(e)}")
 

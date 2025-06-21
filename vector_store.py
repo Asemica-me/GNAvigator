@@ -36,7 +36,7 @@ GPU_CACHE_THRESHOLD = 80
 
 class VectorDatabaseManager:
     def __init__(self):
-        self._embedding_model = None
+        self.embedding_model = os.getenv("EMBEDDING_MODEL")
         self.index = None
         self.metadata_db = []
         self.query_count = 0
@@ -60,43 +60,6 @@ class VectorDatabaseManager:
     def _reset_database(self):
         self.index = None
         self.metadata_db = []
-
-    @property
-    def embedding_model(self):
-        if self._embedding_model is None:
-            # Check if we have cached embeddings
-            if os.path.exists(EMBEDDINGS_CACHE_PATH):
-                logger.info("Found precomputed embeddings cache")
-                return None
-                
-            # Device selection with memory awareness
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                total_mem = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
-                free_mem = torch.cuda.mem_get_info()[0] / (1024 ** 3)
-                
-                if free_mem < 2 or total_mem < 8:  # Less than 2GB free or small GPU
-                    logger.warning(f"Low GPU memory ({free_mem:.1f}GB free of {total_mem:.1f}GB), using CPU")
-                    device = 'cpu'
-                else:
-                    device = 'cuda'
-                    logger.info(f"Using GPU with {free_mem:.1f}GB free memory")
-            else:
-                device = 'cpu'
-                logger.info("Using CPU for embeddings")
-            
-            # Only load model if we need to compute embeddings
-            self._embedding_model = SentenceTransformer(EMBEDDING_MODEL, device=device)
-            self._embedding_model.eval()
-            
-            if device == 'cuda':
-                try:
-                    self._embedding_model.half()
-                    logger.info("Using half-precision model for GPU efficiency")
-                except Exception:
-                    logger.warning("Couldn't convert to half precision, using full precision")
-        
-        return self._embedding_model
 
     def _format_chunk(self, chunk: dict) -> tuple:
         context_str = " | ".join(chunk.get("headers_context", []))
@@ -247,7 +210,6 @@ class VectorDatabaseManager:
             if question in self._cached_embeddings:
                 query_embedding = self._cached_embeddings[question]
             else:
-                # Use a smaller model for query encoding if available
                 if self._embedding_model:
                     with torch.no_grad():
                         query_embedding = self._embedding_model.encode(
@@ -257,7 +219,7 @@ class VectorDatabaseManager:
                         )
                 else:
                     # Fallback to querying with a smaller model
-                    query_model = SentenceTransformer("intfloat/multilingual-e5-small")
+                    query_model = SentenceTransformer("intfloat/multilingual-e5-large")
                     query_embedding = query_model.encode([question], convert_to_numpy=True)
                 
                 if len(self._cached_embeddings) < MAX_CACHE_SIZE:
