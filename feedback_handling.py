@@ -103,22 +103,14 @@ def git_sync():
         subprocess.run(["git", "config", "--local", "user.name", "Streamlit Automated Process"], 
                       cwd=repo_dir, check=True)
         
-        # 3. Initialize Git repo (if needed)
+        # 3. Initialize Git repo if needed
         if not (repo_dir / ".git").exists():
             subprocess.run(["git", "init"], cwd=repo_dir, check=True)
             subprocess.run(["git", "branch", "-M", "main"], cwd=repo_dir, check=True)
             subprocess.run(["git", "remote", "add", "origin", repo_url], 
                           cwd=repo_dir, check=True)
         
-        # 4. Reset to clean state
-        try:
-            subprocess.run(["git", "reset", "--hard", "HEAD"], cwd=repo_dir, check=True)
-            subprocess.run(["git", "clean", "-fd"], cwd=repo_dir, check=True)
-            logging.info("Reset repository to clean state")
-        except subprocess.CalledProcessError as e:
-            logging.warning(f"Git reset failed: {e}. Proceeding anyway")
-        
-        # 5. Pull latest changes first to minimize conflicts
+        # 4. Pull latest changes first (to minimize conflicts)
         try:
             subprocess.run(
                 ["git", "pull", auth_repo_url, "main", "--rebase"],
@@ -126,19 +118,13 @@ def git_sync():
                 check=True,
                 timeout=30
             )
-            logging.info("Successfully pulled latest changes")
         except subprocess.CalledProcessError as e:
-            if "CONFLICT" in str(e):
-                logging.error("Merge conflict detected! Manual resolution required")
-                return
             logging.warning(f"Initial pull failed: {e}. Proceeding with local changes.")
-        except subprocess.TimeoutExpired:
-            logging.warning("Git pull timed out. Proceeding with local changes.")
         
-        # 6. Stage changes
+        # 5. Stage changes
         subprocess.run(["git", "add", str(FEEDBACK_DB)], cwd=repo_dir, check=True)
         
-        # 7. Check for changes
+        # 6. Check for changes
         status_result = subprocess.run(
             ["git", "status", "--porcelain"],
             cwd=repo_dir,
@@ -147,55 +133,45 @@ def git_sync():
             check=True
         )
         if not status_result.stdout.strip():
-            logging.info("No changes to commit")
             return
         
-        # 8. Commit changes
+        # 7. Commit changes
         commit_message = f"Feedback update {datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
         subprocess.run(["git", "commit", "-m", commit_message], cwd=repo_dir, check=True)
-        logging.info(f"Committed changes: {commit_message}")
         
-        # 9. Push with retry logic
-        max_retries = 3
+        # 8. Push with retry logic
+        max_retries = 2
         for attempt in range(max_retries):
             try:
                 subprocess.run(
                     ["git", "push", auth_repo_url, "main"],
                     cwd=repo_dir,
                     check=True,
-                    timeout=45
+                    timeout=30
                 )
-                logging.info("Successfully pushed changes to GitHub")
                 break
             except subprocess.TimeoutExpired:
                 if attempt < max_retries - 1:
-                    wait_time = (attempt + 1) * 15
+                    wait_time = (attempt + 1) * 10
                     logging.warning(f"Git push timed out - retrying in {wait_time}s")
                     time.sleep(wait_time)
                 else:
                     logging.error("Git push failed after multiple attempts")
                     raise
-            except subprocess.CalledProcessError as e:
-                if "rejected" in str(e) and "non-fast-forward" in str(e):
-                    logging.error("Push rejected: remote contains changes we don't have locally")
-                    return
-                raise
     except subprocess.CalledProcessError as e:
         logging.error(f"Git operation failed: {str(e)}")
         if e.stderr:
-            logging.error(f"Command stderr: {e.stderr.strip()}")
+            logging.error(f"Command stderr: {e.stderr.decode().strip()}")
         if e.stdout:
-            logging.error(f"Command stdout: {e.stdout.strip()}")
+            logging.error(f"Command stdout: {e.stdout.decode().strip()}")
     except Exception as e:
         logging.error(f"Unexpected error during Git sync: {str(e)}")
-        import traceback
-        logging.error(traceback.format_exc())
     finally:
-        # Cleanup sensitive data
-        sensitive_vars = ['auth_repo_url', 'token', 'repo_url']
-        for var in sensitive_vars:
-            if var in locals():
-                del locals()[var]
+        # Safe cleanup without UnboundLocalError
+        if 'auth_repo_url' in locals():
+            del auth_repo_url
+        if 'token' in locals():
+            token = None
         gc.collect()
 
 def save_feedback(feedback_data: dict):
