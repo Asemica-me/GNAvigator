@@ -100,14 +100,16 @@ def load_opencv():
             st.error(f"OpenCV install failed: {str(e)}")
             st.stop()
 
-# Initialize NLP resources
-try:
-    nlp = load_spacy_model()
-    load_nltk_data()
-    cv2 = load_opencv()
-except Exception as e:
-    st.error(f"Initialization failed: {str(e)}")
-    st.stop()
+# Initialize NLP resources WITH SPINNER
+with st.spinner("Caricamento risorse NLP..."):
+    try:
+        nlp = load_spacy_model()
+        load_nltk_data()
+        cv2 = load_opencv()
+    except Exception as e:
+        st.error(f"Initialization failed: {str(e)}")
+        st.stop()
+
 
 # --- Main Application ---
 from dotenv import load_dotenv
