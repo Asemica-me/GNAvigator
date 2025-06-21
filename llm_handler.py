@@ -9,6 +9,7 @@ import re
 import gc
 import time
 import weakref
+from aiohttp import ClientSession
 from vector_store import *
 
 load_dotenv()
@@ -33,6 +34,7 @@ class MistralLLM:
         self.semaphore = asyncio.Semaphore(max_concurrency)
         self.citation_regex = re.compile(r'\[(\d+)\]')
         self._client = None  # Use lazy initialization
+        self._create_client()
         self.last_used = time.time()
 
     @property
@@ -115,6 +117,13 @@ class MistralLLM:
         max_tries=3,
         jitter=backoff.full_jitter 
     )
+
+    def _create_client(self):
+        if not self.client or self.client.closed:
+            self.client = ClientSession(
+                headers={"Authorization": f"Bearer {self.api_key}"}
+            )
+
     async def generate_async(
         self,
         question: str,
@@ -123,6 +132,17 @@ class MistralLLM:
         chat_history: Optional[List[Dict[str, str]]] = None
     ) -> str:
         """Generate answer with RAG context using async streaming"""
+        self._create_client() 
+        # Refresh client every 10 requests
+        if not hasattr(self, 'request_count'):
+            self.request_count = 0
+        
+        self.request_count += 1
+        if self.request_count % 10 == 0:
+            await self.client.close()
+            self.client = ClientSession(
+                headers={"Authorization": f"Bearer {self.api_key}"}
+            )
         async with self.semaphore:
             try:
                 messages = self._build_rag_prompt(question, context, chat_history)
@@ -297,5 +317,14 @@ class RAGOrchestrator:
 
     async def close(self):
         """Clean up resources"""
-        if hasattr(self, 'llm') and hasattr(self.llm, 'client'):
-            await self.llm.client.close()
+        if self._llm:
+            try:
+                self._llm.clear_cache()
+            except Exception as e:
+                logger.error(f"Error closing LLM: {str(e)}")
+        
+        if self._vector_db and hasattr(self._vector_db, 'close'):
+            try:
+                await self._vector_db.close()
+            except Exception as e:
+                logger.error(f"Error closing vector DB: {str(e)}")

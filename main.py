@@ -8,7 +8,7 @@ import logging
 import gc
 import pandas as pd
 import re
-import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor
 from feedback_handling import init_db, git_sync, save_feedback, export_feedbacks, FEEDBACK_DB
 init_db()
 from llm_handler import *
@@ -230,25 +230,24 @@ def main():
                         top_k=5
                     )
                 
-                # Run query with proper async handling
-                def execute_query():
+                def run_async_task():
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
                     try:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
                         return loop.run_until_complete(run_query())
                     finally:
                         loop.close()
                 
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(execute_query)
-                    response = future.result()
+                # Execute in a separate thread
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    response = executor.submit(run_async_task).result()
                 
                 source_map = response.get("sources", {})
                 raw_answer = response["answer"]
                 formatted_answer = format_answer_with_links(raw_answer, source_map)
                 
             except Exception as e:
-                logging.exception("Query failed")  # Log full traceback
+                logging.exception("Query failed")
                 error_msg = f"Si è verificato un errore durante l'elaborazione: {type(e).__name__}\n\n{str(e)}"
                 raw_answer = error_msg
                 formatted_answer = error_msg 
@@ -314,13 +313,17 @@ def main():
                 st.error(f"Errore durante l'esportazione: {str(e)}")
 
     # --- Cleanup on exit ---
-    try:
-        if hasattr(orchestrator, 'close'):
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(orchestrator.close())
-    except Exception as e:
-        logging.error(f"Cleanup failed: {str(e)}")
+    def cleanup_orchestrator():
+        try:
+            if hasattr(orchestrator, 'close'):
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(orchestrator.close())
+        except Exception as e:
+            logging.error(f"Cleanup failed: {str(e)}")
+
+    cleanup_orchestrator()
 
 if __name__ == "__main__":
     try:
