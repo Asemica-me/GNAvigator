@@ -1,3 +1,5 @@
+import nest_asyncio 
+nest_asyncio.apply()
 import streamlit as st
 from PIL import Image
 import os
@@ -6,8 +8,10 @@ import logging
 import gc
 import pandas as pd
 import re
+import concurrent.futures
 from feedback_handling import init_db, git_sync, save_feedback, export_feedbacks, FEEDBACK_DB
 init_db()
+from llm_handler import *
 
 # --- Critical Dependencies Setup ---
 # Create directories first (runs once per session)
@@ -25,12 +29,14 @@ try:
     icon = Image.open("data/gna.png")
     st.set_page_config(
         page_title="Assistente AI GNA",
-        page_icon=icon
+        page_icon=icon,
+        initial_sidebar_state="expanded"
     )
 except Exception:
     st.set_page_config(
         page_title="Assistente AI GNA",
-        page_icon="🤖"
+        page_icon="🤖",
+        initial_sidebar_state="expanded"
     )
 st.title("Geoportale Nazionale Archeologia - Assistente Virtuale")
 
@@ -216,16 +222,33 @@ def main():
                     if "raw_answer" not in msg  # Exclude assistant's raw answer
                 ]
                 
-                response = asyncio.run(orchestrator.query(
-                    question=prompt, 
-                    chat_history=llm_history,  # Pass conversation history
-                    top_k=5
-                ))
+                # Async-safe execution
+                async def run_query():
+                    return await orchestrator.query(
+                        question=prompt,
+                        chat_history=llm_history,
+                        top_k=5
+                    )
+                
+                # Run query with proper async handling
+                def execute_query():
+                    try:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        return loop.run_until_complete(run_query())
+                    finally:
+                        loop.close()
+                
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(execute_query)
+                    response = future.result()
+                
                 source_map = response.get("sources", {})
                 raw_answer = response["answer"]
                 formatted_answer = format_answer_with_links(raw_answer, source_map)
+                
             except Exception as e:
-                logging.error(f"Query failed: {str(e)}")
+                logging.exception("Query failed")  # Log full traceback
                 error_msg = f"Si è verificato un errore durante l'elaborazione: {type(e).__name__}\n\n{str(e)}"
                 raw_answer = error_msg
                 formatted_answer = error_msg 
@@ -290,5 +313,17 @@ def main():
             except Exception as e:
                 st.error(f"Errore durante l'esportazione: {str(e)}")
 
+    # --- Cleanup on exit ---
+    try:
+        if hasattr(orchestrator, 'close'):
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(orchestrator.close())
+    except Exception as e:
+        logging.error(f"Cleanup failed: {str(e)}")
+
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally:
+        gc.collect()

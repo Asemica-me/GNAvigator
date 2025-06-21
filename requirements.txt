@@ -10,6 +10,7 @@ https://github.com/explosion/spacy-models/releases/download/it_core_news_md-3.8.
 keybert
 nltk
 python-dotenv
+nest-asyncio
 sentence-transformers
 pytesseract
 pillow
@@ -18,3 +19,4 @@ requests
 backoff
 faiss-cpu
 gitpython
+concurrent.futures

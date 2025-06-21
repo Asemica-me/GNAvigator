@@ -294,3 +294,8 @@ class RAGOrchestrator:
         finally:
             # Clean up after initialization
             self.clear_cache(full=False)
+
+    async def close(self):
+        """Clean up resources"""
+        if hasattr(self, 'llm') and hasattr(self.llm, 'client'):
+            await self.llm.client.close()
