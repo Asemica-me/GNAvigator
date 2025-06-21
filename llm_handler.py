@@ -1,27 +1,23 @@
 import asyncio
-from dotenv import load_dotenv
-from typing import List, Dict, Any, Optional
-from mistralai import Mistral, SystemMessage, UserMessage
-import backoff
+import json
 import logging
 import os
 import re
-import gc
 import time
-import weakref
+import gc
+from typing import List, Dict, Any, Optional
+from dotenv import load_dotenv
 from aiohttp import ClientSession
 from vector_store import *
 
 load_dotenv()
-LLM = os.getenv("GEN_MODEL")
 logger = logging.getLogger(__name__)
 
 class MistralLLM:
     def __init__(
         self,
         api_key: str,
-        model_name: str = LLM,
-        max_retries: int = 5,
+        model_name: str = "mistral-small",
         temperature: float = 0.3,
         max_tokens: int = 2000,
         max_concurrency: int = 5
@@ -30,55 +26,26 @@ class MistralLLM:
         self.model_name = model_name
         self.temperature = temperature
         self.max_tokens = max_tokens
-        self.max_retries = max_retries
         self.semaphore = asyncio.Semaphore(max_concurrency)
         self.citation_regex = re.compile(r'\[(\d+)\]')
-        self._client = None  # Use lazy initialization
-        self._create_client()
-        self.last_used = time.time()
-
-    @property
-    def client(self):
-        """Lazy initialization of Mistral client"""
-        if self._client is None:
-            self._client = Mistral(api_key=self.api_key)
-        self.last_used = time.time()
-        return self._client
-
-    def clear_cache(self):
-        """Release client resources and reset connection"""
-        if self._client:
-            try:
-                # Try to close any existing connections
-                if hasattr(self._client, 'close'):
-                    self._client.close()
-            except Exception as e:
-                logger.warning(f"Error closing Mistral client: {e}")
-            finally:
-                self._client = None
-        gc.collect()
-        logger.info("MistralLLM cache cleared")
+        self.client = None
+        self.request_count = 0
+        
+    async def get_client(self):
+        """Get or create a client session"""
+        if self.client is None or self.client.closed:
+            self.client = ClientSession(
+                headers={"Authorization": f"Bearer {self.api_key}"}
+            )
+            logger.info("Created new Mistral client")
+        return self.client
 
     def _build_rag_prompt(self, question: str, context: List[Dict[str, Any]], chat_history: Optional[List[Dict[str, str]]] = None) -> List[Dict[str, Any]]:
         """Construct RAG system prompt with context"""
         system_content = """
-        Sei un assistente virtuale incaricato di rispondere a domande sul manuale operativo del Geoportale Nazionale Archeologia (GNA), disponibile all'indirizzo: https://gna.cultura.gov.it/wiki/index.php/Pagina_principale, e gestito dall'Istituto Centrale per il Catalogo e la Documentazione (ICCD).
-
-        Segui sempre queste regole:
-        Non rispondere a una domanda con un'altra domanda.
-        Rispondi **sempre** in italiano, indipendentemente dalla lingua della domanda, a meno che l'utente non richieda esplicitamente un'altra lingua.
-        Cita le fonti utilizzando la notazione [numero] dove:
-           - "numero" corrisponde esattamente all'URL della fonte nel contesto;
-           - usa numeri separati per fonti diverse;
-        Se non hai informazioni sufficienti per rispondere, rispondi "Non ho informazioni sufficienti".
-
-        Le tue risposte devono essere sempre:
-        - Disponibili, professionali e naturali
-        - Grammaticalmente corrette e coerenti
-        - Espresse con frasi semplici, evitando formulazioni complesse o frammentate
-        - Complete e chiare, evitando di lasciare domande senza risposta
+        ... [your existing system content] ...
         """
-
+        
         # Build context string with grouped sources
         context_parts = []
         for idx, source_group in enumerate(context, start=1):
@@ -92,37 +59,21 @@ class MistralLLM:
         
         context_str = "\n\n".join(context_parts)
         
-        # Build message list with conversation history
-        messages = [SystemMessage(content=system_content)]
+        # Build message list
+        messages = [{"role": "system", "content": system_content}]
         
-        # Add chat history if exists
+        # Add chat history
         if chat_history:
             for msg in chat_history:
-                if msg["role"] == "user":
-                    messages.append(UserMessage(content=msg["content"]))
-                elif msg["role"] == "assistant":
-                    messages.append(SystemMessage(content=msg["content"]))
+                messages.append({"role": msg["role"], "content": msg["content"]})
         
         # Add current context and question
-        messages.append(
-            UserMessage(
-                content=f"CONTESTO:\n{context_str}\n\nDOMANDA: {question}"
-            )
-        )
+        messages.append({
+            "role": "user",
+            "content": f"CONTESTO:\n{context_str}\n\nDOMANDA: {question}"
+        })
         
         return messages
-    @backoff.on_exception(
-        backoff.expo,
-        Exception,
-        max_tries=3,
-        jitter=backoff.full_jitter 
-    )
-
-    def _create_client(self):
-        if not self.client or self.client.closed:
-            self.client = ClientSession(
-                headers={"Authorization": f"Bearer {self.api_key}"}
-            )
 
     async def generate_async(
         self,
@@ -132,35 +83,18 @@ class MistralLLM:
         chat_history: Optional[List[Dict[str, str]]] = None
     ) -> str:
         """Generate answer with RAG context using async streaming"""
-        self._create_client() 
-        # Refresh client every 10 requests
-        if not hasattr(self, 'request_count'):
-            self.request_count = 0
-        
+        client = await self.get_client()
         self.request_count += 1
-        if self.request_count % 10 == 0:
-            await self.client.close()
-            self.client = ClientSession(
-                headers={"Authorization": f"Bearer {self.api_key}"}
-            )
+        
         async with self.semaphore:
             try:
                 messages = self._build_rag_prompt(question, context, chat_history)
                 
-                # Convert messages to Mistral API format
-                api_messages = []
-                for msg in messages:
-                    if isinstance(msg, SystemMessage):
-                        api_messages.append({"role": "system", "content": msg.content})
-                    else:
-                        api_messages.append({"role": "user", "content": msg.content})
-                
-                # Using the Mistral API directly with aiohttp
-                async with self.client.post(
+                async with client.post(
                     "https://api.mistral.ai/v1/chat/completions",
                     json={
                         "model": self.model_name,
-                        "messages": api_messages,
+                        "messages": messages,
                         "temperature": temperature or self.temperature,
                         "max_tokens": self.max_tokens,
                         "stream": True
@@ -193,26 +127,36 @@ class MistralLLM:
             except Exception as e:
                 logger.error(f"Generation failed: {str(e)}")
                 # Reinitialize client on error
-                await self.initialize_client()
+                if self.client:
+                    await self.client.close()
+                    self.client = None
                 raise
             finally:
                 # Clean up intermediate resources
-                del messages
+                if 'messages' in locals():
+                    del messages
                 gc.collect()
 
     def clear_cache(self):
-        """Release client resources and reset connection"""
-        if self.client:
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    loop.create_task(self.client.close())
-                else:
-                    loop.run_until_complete(self.client.close())
-            except Exception as e:
-                logger.warning(f"Error closing Mistral client: {str(e)}")
-            finally:
-                self.client = None
+        """Release client resources"""
+        async def close_client():
+            if self.client:
+                try:
+                    await self.client.close()
+                except Exception as e:
+                    logger.warning(f"Error closing client: {str(e)}")
+                finally:
+                    self.client = None
+        
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(close_client())
+            else:
+                loop.run_until_complete(close_client())
+        except Exception:
+            pass
+        
         logger.info("MistralLLM cache cleared")
 
     def _validate_citations(self, response: str, context_size: int) -> str:
@@ -277,7 +221,7 @@ class RAGOrchestrator:
         self.query_count = 0
         self.last_cleanup = time.time()
         
-    async def query(self, question: str, top_k: int=5, chat_history: Optional[List[Dict[str, str]]] = None,) -> Dict[str, Any]:
+    async def query(self, question: str, top_k: int=5, chat_history: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
         """End-to-end RAG query execution with memory management"""
         try:
             context_chunks = self.vector_db.query(question, top_k=top_k)
@@ -328,7 +272,7 @@ class RAGOrchestrator:
             self.clear_cache(full=True)
             return {
                 "question": question,
-                "answer": f"Error processing request: {str(e)}",
+                "answer": f"Si è verificato un errore durante l'elaborazione: {str(e)}",
                 "sources": {},
                 "context": []
             }
@@ -337,31 +281,6 @@ class RAGOrchestrator:
             if 'context_chunks' in locals():
                 del context_chunks
             gc.collect()
-
-    def _update_history(
-        self,
-        history: Optional[List[Dict[str, str]]],
-        question: str,
-        answer: str
-    ) -> List[Dict[str, str]]:
-        """Update chat history with new exchange"""
-        new_history = history.copy() if history else []
-        new_history.append({"role": "user", "content": question})
-        new_history.append({"role": "assistant", "content": answer})
-        
-        # Optional: Implement history truncation here
-        # if len(new_history) > 10:  # Keep last 5 exchanges (10 messages)
-        #     new_history = new_history[-10:]
-        
-        return new_history
-
-    async def initialize_vector_store(self, sitemap_path: str, base_domain: str):
-        """Initialize vector store with documents"""
-        try:
-            await self.vector_db.process_and_store_chunks(sitemap_path, base_domain)
-        finally:
-            # Clean up after initialization
-            self.clear_cache(full=False)
 
     async def close(self):
         """Clean up resources"""

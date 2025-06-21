@@ -223,25 +223,21 @@ def main():
                     if "raw_answer" not in msg  # Exclude assistant's raw answer
                 ]
                 
-                # Async-safe execution
-                async def run_query():
-                    return await orchestrator.query(
-                        question=prompt,
-                        chat_history=llm_history,
-                        top_k=5
-                    )
-                
-                def run_async_task():
+                def execute_query():
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
-                        return loop.run_until_complete(run_query())
+                        return loop.run_until_complete(orchestrator.query(
+                            question=prompt,
+                            chat_history=llm_history,
+                            top_k=5
+                        ))
                     finally:
                         loop.close()
                 
                 # Execute in a separate thread
                 with ThreadPoolExecutor(max_workers=1) as executor:
-                    response = executor.submit(run_async_task).result()
+                    response = executor.submit(execute_query).result()
                 
                 source_map = response.get("sources", {})
                 raw_answer = response["answer"]
@@ -314,17 +310,20 @@ def main():
                 st.error(f"Errore durante l'esportazione: {str(e)}")
 
     # --- Cleanup on exit ---
-    def cleanup_orchestrator():
-        try:
-            if hasattr(orchestrator, 'close'):
-                import asyncio
+    try:
+        if hasattr(orchestrator, 'close'):
+            def close_orchestrator():
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-                loop.run_until_complete(orchestrator.close())
-        except Exception as e:
-            logging.error(f"Cleanup failed: {str(e)}")
-
-    cleanup_orchestrator()
+                try:
+                    loop.run_until_complete(orchestrator.close())
+                finally:
+                    loop.close()
+            
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                executor.submit(close_orchestrator).result()
+    except Exception as e:
+        logging.error(f"Cleanup failed: {str(e)}")
 
 if __name__ == "__main__":
     try:
