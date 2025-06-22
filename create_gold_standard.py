@@ -1,183 +1,192 @@
-import json
-import os
 import asyncio
+import json
+import csv
+import os
 import logging
-import random
-import time
-from tqdm.asyncio import tqdm
+import re
+from pathlib import Path
 from dotenv import load_dotenv
-from llm_handler import MistralLLM 
-
-load_dotenv()
-LLM = os.getenv("GEN_MODEL")
-DATA_FOLDER = "data"
-INPUT_CHUNKS_FILE = os.path.join(DATA_FOLDER, "chunks_memory.json")
-OUTPUT_TEST_SET = os.path.join(DATA_FOLDER, "test_set.json")
-MAX_QUESTIONS_PER_CHUNK = 3
-MAX_CONCURRENCY = 3  # Reduced from 5 to 3
-CONTENT_PREVIEW_LENGTH = 150
+from mistralai import Mistral, SystemMessage, UserMessage
+import backoff
+import random
+from typing import List, Dict, Any, Tuple, Optional
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+load_dotenv()
+
 class QuestionGenerator:
-    def __init__(self, api_key: str):
-        self.llm = MistralLLM(
-            api_key=api_key,
-            model_name=LLM,
-            temperature=0.3,
-            max_tokens=500,
-            max_concurrency=MAX_CONCURRENCY,  # Use the reduced concurrency
-            max_retries=5  # Increase retry attempts
-        )
-        self.last_request_time = time.time()
-    
-    async def generate_questions(self, chunk_content: str) -> list:
-        if not chunk_content.strip():
-            return []
+    def __init__(
+        self,
+        api_key: str,
+        model_name: str = os.getenv("GEN_MODEL"),
+        max_retries: int = 6,
+        max_concurrency: int = 5,
+        temperature: float = 0.1
+    ):
+        self.api_key = api_key
+        self.model_name = model_name
+        self.temperature = temperature
+        self.semaphore = asyncio.Semaphore(max_concurrency)
+        self.max_retries = max_retries
+        self.client = Mistral(api_key=api_key)
+        self.question_id = 0
 
-        # Create a fake context
-        context = [{
-            "source": "question-generation",
-            "contents": [chunk_content]
-        }]
-        
-        # Create the prompt
-        question_prompt = """
-        Genera 1-3 domande in italiano basate esclusivamente sul testo fornito.
-        Le domande devono:
-        1. Essere rispondibili direttamente dal testo
-        2. Essere chiare e concise
-        3. Riguardare le informazioni chiave nel testo
-        4. Essere in italiano corretto
-        5. Non contenere riferimenti a immagini o tabelle
-        6. Essere formulate come interrogative complete
+    @backoff.on_exception(backoff.expo, Exception, max_tries=3)
+    async def generate_questions(self, text: str, context_type: str = "single") -> List[str]:
+        """Generate questions based on text content and context type"""
+        if context_type == "single":
+            # prompt = (
+            #     """
+            #     Genera 1-3 domande in italiano che possono essere risposte esattamente utilizzando SOLO il seguente testo.
+            #     Scrivi ogni domanda su una nuova riga senza numeri, punti elenco o caratteri aggiuntivi.\n\n"""
+            #     f"TESTO:\n{text}"
+            # )
+            prompt = """
+                Generate 1-3 different questions in ITALIAN that could be answered by the following text:\n
+                {text}\n     
+                Write each question on a new line without numbers, bullet points, or additional characters."""
+        else:  # multi-chunk context
+            # prompt = (
+            #     """
+            #     Genera 1-2 domande in italiano che richiedono la COMBINAZIONE di tutte le informazioni nel testo seguente.
+            #     Scrivi ogni domanda su una nuova riga senza numeri, punti elenco o caratteri aggiuntivi.\n\n"""
+            #     f"TESTO COMBINATO:\n{text}"
+            # )
+            prompt = """
+                Generate 1-2 questions in Italian that require the COMBINATION of the information in the following text:\n
+                {text}\n
+                Write each question on a new line without numbers, bullet points, or additional characters."""
 
-        Restituisci SOLO un JSON valido con la struttura:
-        {"questions": ["domanda1", "domanda2"]}
-        """
+        messages = [UserMessage(role="user", content=prompt)]
+        async with self.semaphore:
+            try:
+                response = self.client.chat.complete(
+                    model=self.model_name,
+                    messages=messages,
+                    temperature=self.temperature,
+                    max_tokens=1000
+                )
+                content = response.choices[0].message.content.strip()
+                return [line.strip() for line in content.splitlines() if line.strip()]
+            except Exception as e:
+                logger.error(f"Question generation failed: {str(e)}")
+                return []
 
-        try:
-            # Rate limiting: add jittered delay
-            elapsed = time.time() - self.last_request_time
-            if elapsed < 1.0:  # Ensure at least 1 second between requests
-                jitter = random.uniform(0.1, 0.5)
-                await asyncio.sleep(1.0 - elapsed + jitter)
-            
-            # Use your existing generate_async method
-            response = await self.llm.generate_async(
-                question=question_prompt,
-                context=context,
-                temperature=0.3
-            )
-            
-            # Update last request time
-            self.last_request_time = time.time()
-            
-            # Parse the response
-            if response.strip().startswith("{"):
-                try:
-                    result = json.loads(response)
-                    return result.get("questions", [])
-                except json.JSONDecodeError:
-                    pass
-            
-            # Fallback: extract questions from text
-            questions = []
-            for line in response.split("\n"):
-                if any(line.strip().startswith(c) for c in ['-', '*', '•', '1.', '2.', '3.']):
-                    question = line.strip().lstrip('*-•1234567890. ').strip()
-                    if question and question.endswith('?'):
-                        questions.append(question)
-            return questions[:MAX_QUESTIONS_PER_CHUNK]
-            
-        except Exception as e:
-            logger.error(f"Error generating questions: {str(e)}")
-            return []
-    
-    async def close(self):
-        """Clean up resources"""
-        self.llm.clear_cache()
+
+def is_valid_question(question: str) -> bool:
+    """Filter out low-quality questions"""
+    if not question or len(question) < 15 or len(question) > 150:
+        return False
+    if not question.endswith('?'):
+        return False
+    if any(word in question.lower() for word in ["riassumi", "opinione", "pensi", "secondo te"]):
+        return False
+    return True
+
 
 async def main():
-    # Ensure data folder exists
-    os.makedirs(DATA_FOLDER, exist_ok=True)
+    # Configure paths
+    data_folder = Path("data")
+    chunks_file = data_folder / "chunks_memory.json"
+    output_file = data_folder / "gold_standard.csv"
     
-    # Load chunks from memory file
+    # Validate files
+    if not chunks_file.exists():
+        logger.error(f"Chunks file not found: {chunks_file}")
+        return
+
+    # Load chunks data
     try:
-        with open(INPUT_CHUNKS_FILE, "r", encoding="utf-8") as f:
-            chunks_data = json.load(f)
-            
-        # Handle both list and dictionary formats
-        if isinstance(chunks_data, dict):
-            chunks_list = list(chunks_data.values())
-            logger.info(f"Loaded {len(chunks_list)} chunks from dictionary in {INPUT_CHUNKS_FILE}")
-        elif isinstance(chunks_data, list):
-            chunks_list = chunks_data
-            logger.info(f"Loaded {len(chunks_list)} chunks from list in {INPUT_CHUNKS_FILE}")
-        else:
-            logger.error(f"Unexpected data format in {INPUT_CHUNKS_FILE}")
-            return
-            
-    except FileNotFoundError:
-        logger.error(f"Chunks file not found: {INPUT_CHUNKS_FILE}")
+        with open(chunks_file, 'r', encoding='utf-8') as f:
+            chunks = json.load(f)
+        logger.info(f"Loaded {len(chunks)} chunks")
+    except Exception as e:
+        logger.error(f"Error loading chunks: {str(e)}")
         return
-    except json.JSONDecodeError:
-        logger.error(f"Invalid JSON format in {INPUT_CHUNKS_FILE}")
-        return
-    
-    # Initialize Mistral question generator
+
+    # Initialize generator
     api_key = os.getenv("MISTRAL_API_KEY")
     if not api_key:
         logger.error("MISTRAL_API_KEY environment variable not set")
         return
     
-    generator = QuestionGenerator(api_key)
-    
-    # Generate test set
-    test_set = []
-    valid_chunks = [c for c in chunks_list if c.get('content', '').strip()]
-    logger.info(f"Found {len(valid_chunks)} valid chunks with content")
-    
-    # Process chunks with rate limiting
-    progress_bar = tqdm(total=len(valid_chunks), desc="Generating questions")
-    
-    for chunk in valid_chunks:
-        try:
-            questions = await generator.generate_questions(chunk['content'])
+    generator = QuestionGenerator(api_key=api_key)
+
+    # Prepare output
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    written_pairs = set()
+
+    with open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["question", "chunk_id"])
+        
+        # Process single-chunk questions
+        single_count = 0
+        for chunk in chunks:
+            chunk_id = chunk.get('chunk_id')
+            content = chunk.get('content', '')
             
-            for q in questions[:MAX_QUESTIONS_PER_CHUNK]:
-                test_entry = {
-                    "question": q,
-                    "chunk_id": chunk["chunk_id"],
-                    "source": chunk["source"],
-                    "content_preview": chunk["content"][:CONTENT_PREVIEW_LENGTH] + "..." 
-                            if len(chunk["content"]) > CONTENT_PREVIEW_LENGTH 
-                            else chunk["content"],
-                    "content_type": chunk["content_type"]
-                }
+            if not chunk_id or not content.strip():
+                continue
+            
+            try:
+                questions = await generator.generate_questions(content, "single")
+                for q in questions:
+                    if not is_valid_question(q):
+                        continue
+                    # Deduplicate question-chunk pairs
+                    pair = (q.lower().strip(), chunk_id)
+                    if pair not in written_pairs:
+                        writer.writerow([q, chunk_id])
+                        written_pairs.add(pair)
+                        single_count += 1
+            except Exception as e:
+                logger.error(f"Failed chunk {chunk_id}: {str(e)}")
+        
+        logger.info(f"Generated {single_count} single-chunk questions")
+        
+        # Process multi-chunk questions
+        multi_count = 0
+        
+        # Create groups of 2-3 random chunks from the same source
+        chunks_by_source = {}
+        for chunk in chunks:
+            if source := chunk.get('source'):
+                chunks_by_source.setdefault(source, []).append(chunk)
+        
+        for source, source_chunks in chunks_by_source.items():
+            if len(source_chunks) < 2:
+                continue
                 
-                test_set.append(test_entry)
-        except Exception as e:
-            logger.error(f"Error processing chunk {chunk['chunk_id']}: {str(e)}")
+            # Create 2-3 groups per source
+            for _ in range(min(3, len(source_chunks) // 2)):
+                # Random group size (2-3 chunks)
+                group_size = random.randint(2, min(3, len(source_chunks)))
+                group = random.sample(source_chunks, group_size)
+                
+                combined_content = "\n\n".join(c['content'] for c in group)
+                logger.info(f"Processing multi-chunk group with {group_size} chunks from {source}")
+                
+                try:
+                    questions = await generator.generate_questions(combined_content, "multi")
+                    for q in questions:
+                        if not is_valid_question(q):
+                            continue
+                        for chunk in group:
+                            pair = (q.lower().strip(), chunk['chunk_id'])
+                            if pair not in written_pairs:
+                                writer.writerow([q, chunk['chunk_id']])
+                                written_pairs.add(pair)
+                                multi_count += 1
+                except Exception as e:
+                    logger.error(f"Failed multi-chunk group: {str(e)}")
         
-        progress_bar.update(1)
-        
-        # Add additional delay between chunks
-        await asyncio.sleep(random.uniform(0.5, 1.5))
-    
-    progress_bar.close()
-    
-    # Save results
-    with open(OUTPUT_TEST_SET, "w", encoding="utf-8") as f:
-        json.dump(test_set, f, ensure_ascii=False, indent=2)
-    
-    logger.info(f"✅ Generated {len(test_set)} questions in {OUTPUT_TEST_SET}")
-    await generator.close()
+        logger.info(f"Generated {multi_count} multi-chunk associations")
+        logger.info(f"Total questions: {len(written_pairs)}")
+        logger.info(f"Dataset saved to {output_file}")
 
 if __name__ == "__main__":
     asyncio.run(main())
