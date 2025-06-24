@@ -12,6 +12,7 @@ import logging
 import time
 import json
 from tqdm import tqdm
+import random 
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -142,7 +143,7 @@ class VectorDatabaseManager:
                 # Generate embeddings only if needed
                 model = self.embedding_model
                 if model:
-                    embeddings = self._generate_embeddings_efficiently(documents)
+                    embeddings = self._generate_embeddings(documents)
                     # Cache embeddings for future runs
                     np.save(EMBEDDINGS_CACHE_PATH, embeddings)
                     logger.info(f"Saved embeddings cache to {EMBEDDINGS_CACHE_PATH}")
@@ -183,8 +184,8 @@ class VectorDatabaseManager:
         finally:
             self._clear_memory()
 
-    def _generate_embeddings_efficiently(self, documents: list) -> np.ndarray:
-        """Optimized embedding generation with batching and memory management"""
+    def _generate_embeddings(self, documents: list) -> np.ndarray:
+        """Embedding generation with batching and memory management"""
         # Determine optimal batch size based on hardware
         if torch.cuda.is_available():
             batch_size = 128  # Larger batches for GPU
@@ -257,7 +258,7 @@ class VectorDatabaseManager:
                         )
                 else:
                     # Fallback to querying with a smaller model
-                    query_model = SentenceTransformer("intfloat/multilingual-e5-small")
+                    query_model = SentenceTransformer(os.getenv("EMBEDDING_MODEL"))
                     query_embedding = query_model.encode([question], convert_to_numpy=True)
                 
                 if len(self._cached_embeddings) < MAX_CACHE_SIZE:
@@ -281,6 +282,7 @@ class VectorDatabaseManager:
                     
                     results.append({
                         "score": float(score),
+                        "id": self.metadata_db[i]["id"],
                         "title": item["metadata"].get("title", ""),
                         "source": item["metadata"].get("source", ""),
                         "content_type": item["metadata"].get("content_type", "text"),
@@ -318,6 +320,54 @@ class VectorDatabaseManager:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         gc.collect()
+
+    def sample_documents(self, n: int) -> list:
+        """Randomly sample documents from the database"""
+        if not self.metadata_db:
+            logger.warning("No documents in database to sample")
+            return []
+        
+        # Ensure we don't request more than available
+        n = min(n, len(self.metadata_db))
+        
+        # Generate random indices without replacement
+        sample_indices = random.sample(range(len(self.metadata_db)), n)
+        
+        # Retrieve sampled documents
+        samples = []
+        for idx in sample_indices:
+            item = self.metadata_db[idx]
+            samples.append({
+                "id": item["id"],
+                "document": item["document"],
+                "metadata": item["metadata"],
+                "content": item["metadata"].get("title", "") + "\n" + item["document"][:500] + "..."
+            })
+        
+        logger.info(f"Sampled {n} documents from database")
+        return samples
+
+    def get_documents_by_ids(self, doc_ids: list) -> list:
+        """Retrieve documents by their IDs"""
+        if not self.metadata_db:
+            return []
+        
+        # Create lookup dictionary for faster access
+        id_to_doc = {item["id"]: item for item in self.metadata_db}
+        
+        results = []
+        for doc_id in doc_ids:
+            if doc_id in id_to_doc:
+                item = id_to_doc[doc_id]
+                results.append({
+                    "id": doc_id,
+                    "document": item["document"],
+                    "metadata": item["metadata"],
+                    "content": item["metadata"].get("title", "") + "\n" + item["document"][:500] + "..."
+                })
+        
+        logger.info(f"Retrieved {len(results)} documents by ID")
+        return results
 
 async def main():
     db_manager = VectorDatabaseManager()

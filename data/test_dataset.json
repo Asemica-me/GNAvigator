@@ -1,0 +1,702 @@
+[
+  {
+    "question": "Qual è la procedura per compilare il MOSI?",
+    "relevant_docs": [
+      "0352bf32f2a80a0507b658e7b4140427a1e0c7f27557b42beb5c220525452951"
+    ],
+    "document_content": "Compilare il MOSI\nFotointerpretazione | Fotointerpretazione\n\nCompilare il MOSI\nTorna su Torna su..."
+  },
+  {
+    "question": "Qual è la differenza tra OGD e OGT?",
+    "relevant_docs": [
+      "12bb817084d2aa18fb0357dfb08a43d8bb55ea0a1f8b5b3ceb5051d455ac1966"
+    ],
+    "document_content": "OGD+OGT\nDA OGT A OGD | DA OGT A OGD\n\nOGD+OGT\nTorna su Torna su..."
+  },
+  {
+    "question": "Quali sono le brevi note su QGIS?",
+    "relevant_docs": [
+      "81cb50b127e6134ce49998e1fd95a0993be384755cf3249502f37615949e9c39"
+    ],
+    "document_content": "Brevi note su QGIS\nIndice | I servizi di mappa esterni (WMS/WFS)\n\nBrevi note su QGIS\nQCheaunaNuiaVIMSANMISConsessone\n\n..."
+  },
+  {
+    "question": "Quali sono le istruzioni operative per il conferimento al GNA dei dati minimi di tutte le ricerche archeologiche dirette dal Ministero della Cultura?",
+    "relevant_docs": [
+      "58f7c91fea2f1c170ba86131e497a47fa33fa3ab00faef99dc1187af1451cd49"
+    ],
+    "document_content": "Istruzioni operative\nIstruzioni operative per il conferimento al GNA dei dati minimi di tutte le ricerche archeologiche dirette dal Ministero della Cultura | Istruzioni operative per il conferimento al GNA dei dati minimi di tutte le ricerche archeologiche dirette dal Ministero della Cultura\n\nIstruzioni operative\nPROGETTO RAPTOR (Ricerca Archivi e Pratiche per la Tutela Operativa Regionale): Raccolta dei dati per la relazione di assoggettabilità a VPIA : la ditta/il professionista usa il template ministeriale per lo..."
+  },
+  {
+    "question": "Come posso stampare i diversi tipi di geometrie MOSI?",
+    "relevant_docs": [
+      "1ba8a02c39884832d1b46463e6c460e118673bfdd27d28b1a7a8edeab5f0b445"
+    ],
+    "document_content": "Per stampare\nStampare i MOSI (Catalogo dei siti) | Stampare i MOSI (Catalogo dei siti)\n\nPer stampare\nPer stampare i diversi tipi di geometrie MOSI è necessario modificare il layer di copertura: se non è già attivo il pannello dell’Atlante, dalla barra dei menu superiore cliccare su Atlante > Impostazioni Atlante. A questo punto il pannello comparirà nella colonna di destra. Per stampare i diversi tipi di geometrie MOSI è necessario modificare il layer di copertura: se non è già attivo il pannello dell’Atlant..."
+  },
+  {
+    "question": "Qual è il caso d'uso per inserire MOSI esterni all'area del MOPR?",
+    "relevant_docs": [
+      "d49dc2df94454a9e48570ccd6f957263c397eb5d0ce544ad92952ac2135c9e68"
+    ],
+    "document_content": "Casi d'uso\nCasi d'uso | Inserire MOSI esterni all'area del MOPR\n\nCasi d'uso\nALT_TEXT: MOSIextra.jpg..."
+  },
+  {
+    "question": "Come posso ottenere gli indirizzi (URL) per i servizi di mappa esterni (WMS/WFS) in QGIS?",
+    "relevant_docs": [
+      "0060e6e5b1aa78b19a64e9a437c1114180b3d506994bc2065c04b3d82e433f4a"
+    ],
+    "document_content": "Brevi note su QGIS\nIndice | I servizi di mappa esterni (WMS/WFS) | I servizi di mappa esterni (WMS/WFS)\n\nBrevi note su QGIS\nGli indirizzi (URL) da copiare ed incollare nello spazio (NON vanno aperti, ma solo copiati ed incollati) sono normalmente disponibili nei geo-portali dedicati di ciascuna regione e facilmente rintracciabili con una ricerca del tipo WMS regione XXX . Gli indirizzi (URL) da copiare ed incollare nello spazio (NON vanno aperti, ma solo copiati ed incollati) sono normalmente disponibili nei geo-p..."
+  },
+  {
+    "question": "Quali sono le brevi note su QGIS?",
+    "relevant_docs": [
+      "81cb50b127e6134ce49998e1fd95a0993be384755cf3249502f37615949e9c39"
+    ],
+    "document_content": "Brevi note su QGIS\nIndice | I servizi di mappa esterni (WMS/WFS)\n\nBrevi note su QGIS\nQCheaunaNuiaVIMSANMISConsessone\n\n..."
+  },
+  {
+    "question": "Quali sono i casi d'uso per l'inserimento di MOSI esterni all'area del MOPR?",
+    "relevant_docs": [
+      "9fc76dc92aadad25af50576dc0e0772b9ffddaaa19d00c7579409f89b0f83e55"
+    ],
+    "document_content": "Casi d'uso\nCasi d'uso | Inserire MOSI esterni all'area del MOPR | Inserire MOSI esterni all'area del MOPR\n\nCasi d'uso\nNel corso dell’organizzazione del ‘’survey’’ relativo ad una verifica preventiva dell’interesse archeologico, e in specifico durante il tragitto per raggiungere l’area MOPR e quella del tracciato progettuale, si è verificato il caso di rinvenimenti localizzati al di fuori delle aree di RCG definite (registrate con l’apposita procedura) e al di fuori dell’area MOPR. Nel corso dell’organizzaz..."
+  },
+  {
+    "question": "Qual è l'utilizzo del Template per la redazione di una carta archeologica?",
+    "relevant_docs": [
+      "b8f49fb129265bd0541e66913007df32ae6856b10365f00c454d81cb50cca35f"
+    ],
+    "document_content": "Qualche applicazione specifica\nUtilizzo del Template per la redazione di una carta archeologica | La compilazione del Template\n\nQualche applicazione specifica\nALT_TEXT: ..."
+  },
+  {
+    "question": "Qual è l'indirizzo email a cui scrivere per chiedere chiarimenti sulle istruzioni del progetto?",
+    "relevant_docs": [
+      "f6ffe421a10e78b6eb9a6092671043c3d523cfe6b2fc95be2090f9ebd849f8b5"
+    ],
+    "document_content": "Il progetto\nAlcune avvertenze | Il codice personale | Il codice personale\n\nIl progetto\nSi prega di leggere attentamente queste brevi note e di seguirle. Nel caso ci siano delle mancanze nelle istruzioni o delle incertezze nell'applicazione si prega di scrivere a dg-abap.gna@cultura.gov.it per chiarimenti. Si prega di leggere attentamente queste brevi note e di seguirle. Nel caso ci siano delle mancanze nelle istruzioni o delle incertezze nell'applicazione si prega di scrivere a dg-abap.gna@cultura.gov.it pe..."
+  },
+  {
+    "question": "Quali sono le istruzioni operative per il conferimento al GNA dei dati minimi di tutte le ricerche archeologiche dirette dal Ministero della Cultura?",
+    "relevant_docs": [
+      "c46025e56ecc69c84150212c00a2b16f3462d7be0bf89df716aa2e73674455b4"
+    ],
+    "document_content": "Istruzioni operative\nIstruzioni operative per il conferimento al GNA dei dati minimi di tutte le ricerche archeologiche dirette dal Ministero della Cultura | Istruzioni operative per il conferimento al GNA dei dati minimi di tutte le ricerche archeologiche dirette dal Ministero della Cultura\n\nIstruzioni operative\n32/2023. I dati possono essere riutilizzati senza modifiche oppure, se si riscontrano errori o imprecisioni nei dati alfanumerici o nel posizionamento, possono essere modificati attraverso il “plugin GNA” ,..."
+  },
+  {
+    "question": "Quali informazioni saranno visibili nella pagina di inserimento dati quando si stampa il Catalogo dei siti MOSI?",
+    "relevant_docs": [
+      "15f0a925200ca4399cb04eaa355cc6a3ebff4182212496134675d7d6cfff95f3"
+    ],
+    "document_content": "Per stampare\nStampare i MOSI (Catalogo dei siti) | Stampare i MOSI (Catalogo dei siti)\n\nPer stampare\nSarà visibile tutto ciò che si vede nella pagina di inserimento dati. Nell’esempio proposto si può notare come nella mappa a grande scala compaia la cartografia catastale che è visibile solo fino alla scala 1:10.000 circa. Nella parte destra in alto sono raccolte le informazioni essenziali: localizzazione, definizione, cronologia, modalità di individuazione, distanza dall’opera in progetto e breve descrizione..."
+  },
+  {
+    "question": "Qual è l'ordine dei vocabolari nel progetto GPT?",
+    "relevant_docs": [
+      "aeea88280431fe02810f2bbcfc6000daf5ea0271ba45b041391ae2711d8f771f"
+    ],
+    "document_content": "Vocabolario GPT\n\n\nVocabolario GPT\nNella struttura del progetto tutti i vocabolari sono numerici, registrati come tali e possono seguire un ordine apparentemente casuale dovuto all'aggiunta di termini nel tempo. Il valore è l'etichetta associata. Nella struttura del progetto tutti i vocabolari sono numerici, registrati come tali e possono seguire un ordine apparentemente casuale dovuto all'aggiunta di termini nel tempo. Il valore è l'etichetta associata...."
+  },
+  {
+    "question": "Come si può copiare il percorso del file per ottenere il riferimento completo dell’archivio?",
+    "relevant_docs": [
+      "0a34345bca4049e801beddbca3a119f27dc3969c9b81ef2b30c12050e30a5116"
+    ],
+    "document_content": "Qualche applicazione specifica\nUtilizzo del Template per la redazione di una carta archeologica | La ricerca d’archivio | La ricerca d’archivio\n\nQualche applicazione specifica\nCome copiare il percorso del file per ottenere il riferimento completo dell’archivio Spendo qualche riga per descrivere la procedura adottata per il caso di Fano nel corso della ricerca di archivio, che si è dimostrata utile per semplificare e velocizzare la compilazione dei MOSI (il lavoro è ancora in corso e a oggi sono stati inseriti circa duecento M..."
+  },
+  {
+    "question": "Quali sono i fattori che influenzano il rischio archeologico in un'area con potenziale archeologico?",
+    "relevant_docs": [
+      "4d1b3ec23dd37640e246f05a6e49672c9d66dbfdf8d59f93f7b2c0aab7b6ef40"
+    ],
+    "document_content": "Il progetto\nLa struttura del progetto | La struttura del progetto\n\nIl progetto\nUn’area caratterizzata da un determinato potenziale archeologico può possedere coefficienti di rischio estremamente diversificati a seconda delle lavorazioni previste da uno specifico intervento. Per fare solo un esempio banale: emergenze archeologiche note, conservate in situ a una profondità di -2m., rappresentano un’area con rischio altissimo se il progetto coinvolgerebbe quote vicine a quelle della loro giacitura; se vicevers..."
+  },
+  {
+    "question": "Qual è la struttura dei vocabolari nel progetto?",
+    "relevant_docs": [
+      "3af58b78ab0cf6975d37f9110a78e9b3ec21b682d4438789727594b2c804cea8"
+    ],
+    "document_content": "Vocabolario AMA\n\n\nVocabolario AMA\nNella struttura del progetto tutti i vocabolari sono numerici, registrati come tali e possono seguire un ordine apparentemente casuale dovuto all'aggiunta di termini nel tempo. Il valore è l'etichetta associata. Nella struttura del progetto tutti i vocabolari sono numerici, registrati come tali e possono seguire un ordine apparentemente casuale dovuto all'aggiunta di termini nel tempo. Il valore è l'etichetta associata...."
+  },
+  {
+    "question": "Quali sono le informazioni specifiche che sono state inserite nel Template per la redazione di una carta archeologica?",
+    "relevant_docs": [
+      "f2b80a43ea2a2afe68b01c2132757fec4e98426da567654501c5898d1d484ca4"
+    ],
+    "document_content": "Qualche applicazione specifica\nUtilizzo del Template per la redazione di una carta archeologica | La compilazione del Template | La compilazione del Template\n\nQualche applicazione specifica\nSono stati inseriti i MOSI anche per le aree che sulla base di sorveglianze archeologiche sono risultate prive di tracce archeologiche, specificando sempre la quota a cui si sono attestati gli scavi e, ove disponibile, la quota del terreno geologico. Quest’ultima, ove disponibile, è sempre stata riportata nel campo note delle quote in quan..."
+  },
+  {
+    "question": "Qual è la differenza tra indagini di scavo che non hanno dato luogo a rinvenimenti ma hanno intaccato solo strati antropici e quelle che hanno raggiunto il livello del suolo naturale?",
+    "relevant_docs": [
+      "870c562381362b58091716fd972ad22aaf44a0842656476b3b816eabc824b42c"
+    ],
+    "document_content": "Il progetto\nAlcune avvertenze | Dati negativi e assenza di ritrovamenti | Dati negativi e assenza di ritrovamenti\n\nIl progetto\nIn tal caso, è fondamentale distinguere tra indagini che non hanno dato luogo a rinvenimenti, ma in cui i lavori hanno intaccato solo strati antropici, e le indagini che hanno raggiunto con certezza il livello del suolo naturale. Tutte le indagini di scavo vengono rappresentate tramite il layer DSC, che indica l'esatta estensione dell'area indagata e nel quale è previsto un campo ap..."
+  },
+  {
+    "question": "Quali sono i dati da inserire nel MOPR per compilare il contesto geomorfologico e ambientale in epoca antica?",
+    "relevant_docs": [
+      "586c2c44adb5920ffcdbc203a2eab2f0fc7108723c46bfd0fb94deaacb77b8e8"
+    ],
+    "document_content": "Compilare il MOPR\nDati progetto | Inserire i dati nei layer collegati | VRP - Carta del potenziale\n\nCompilare il MOPR\nContesto\narcheologico\n\nContesto\ngeomorfologicoe\nambientalein\nepocaantica\n\nVisibilit\ndellarea\n\nContesto\ngeomorfologicoe\nambientalein_et\n\npost-antica\n\nAreeincuilafrequentazionein\netaanticadaritenersi\nragionevolmentecerta,sullabase\nsiadiindaginistratigrafiche,sia\ndiindaginiindirette\n\nE/O\nAreeconnotateinanticoda\ncaratteriseomorfologicie\nallinsediamentoumano\n\nE/O\n\nAree_conbuonavisibilital\nsuolo,connota..."
+  },
+  {
+    "question": "Qual è la struttura dei vocabolari nel progetto?",
+    "relevant_docs": [
+      "3af58b78ab0cf6975d37f9110a78e9b3ec21b682d4438789727594b2c804cea8"
+    ],
+    "document_content": "Vocabolario AMA\n\n\nVocabolario AMA\nNella struttura del progetto tutti i vocabolari sono numerici, registrati come tali e possono seguire un ordine apparentemente casuale dovuto all'aggiunta di termini nel tempo. Il valore è l'etichetta associata. Nella struttura del progetto tutti i vocabolari sono numerici, registrati come tali e possono seguire un ordine apparentemente casuale dovuto all'aggiunta di termini nel tempo. Il valore è l'etichetta associata...."
+  },
+  {
+    "question": "Quali sono le istruzioni operative per il conferimento al GNA dei dati minimi di tutte le ricerche archeologiche dirette dal Ministero della Cultura?",
+    "relevant_docs": [
+      "a7795b064090a510e23f4198c28e556cc664dd890ca21953e408521e2108f446"
+    ],
+    "document_content": "Istruzioni operative\nIstruzioni operative per il conferimento al GNA dei dati minimi di tutte le ricerche archeologiche dirette dal Ministero della Cultura | Istruzioni operative per il conferimento al GNA dei dati minimi di tutte le ricerche archeologiche dirette dal Ministero della Cultura\n\nIstruzioni operative\nIn seguito al conferimento delle schede mediante il plugin GNA, le schede nuove o modificate saranno inviate al sistema RAPTOR secondo protocolli di interoperabilità definiti centralmente, senza necessità d..."
+  },
+  {
+    "question": "Quali sono le istruzioni operative per il conferimento al GNA dei dati minimi di tutte le ricerche archeologiche dirette dal Ministero della Cultura?",
+    "relevant_docs": [
+      "3544493d76aa0e0a098c659291f7fecd021e0b3bb52dedc979502f13f8f82641"
+    ],
+    "document_content": "Istruzioni operative\nIstruzioni operative per il conferimento al GNA dei dati minimi di tutte le ricerche archeologiche dirette dal Ministero della Cultura\n\nIstruzioni operative\n- la rappresentazione con geometrie puntuali è prevista che la raccolta dei dati pregressi d’archivio, sia nell’ambito dell'archeologia preventiva sia in occasione di altre attività di censimento del pregresso, e in ogni caso quando non si disponga di dati certi riguardo al posizionamento/alla planimetria del rinvenimento;\n- la rappresentazi..."
+  },
+  {
+    "question": "Qual è l'ordine dei vocabolari nel progetto?",
+    "relevant_docs": [
+      "f450791732c679bf6acc671ade850bacffb30ab3adbacbaeda5c2873fc99c72d"
+    ],
+    "document_content": "Vocabolario FOIF\n\n\nVocabolario FOIF\nNella struttura del progetto tutti i vocabolari sono numerici, registrati come tali e possono seguire un ordine apparentemente casuale dovuto all'aggiunta di termini nel tempo. Il valore è l'etichetta associata. Nella struttura del progetto tutti i vocabolari sono numerici, registrati come tali e possono seguire un ordine apparentemente casuale dovuto all'aggiunta di termini nel tempo. Il valore è l'etichetta associata...."
+  },
+  {
+    "question": "Qual è lo scopo del template utilizzato nel progetto del Geoportale Nazionale Archeologia (GNA)?",
+    "relevant_docs": [
+      "2cdd4f2f7c69fc4fa9b7663de4b954716061e97c62925e8b90bbe43fedd9cda1"
+    ],
+    "document_content": "Il progetto\nPremessa | Premessa\n\nIl progetto\nIl template è strutturato per raccogliere dati esito di qualsiasi tipo di indagine ed è quindi utilizzabile in tutte le attività di raccolta e inserimento di dati che utilizzano tale standard di rappresentazione e descrizione dei dati. All'interno del manuale è possibile reperire le informazioni di dettaglio relative alla struttura, alle caratteristiche e alle modalità di compilazione dei singoli campi della banca dati GNA, raccolte all'interno di tabelle; sono i..."
+  },
+  {
+    "question": "Come si modifica il titolo del testalino nella carta del rischio (VRD) per stampare?",
+    "relevant_docs": [
+      "bc7ce40aad15905c4aaaa383849d93fcd7d272ec51aa66bea4d7122d80bea8f3"
+    ],
+    "document_content": "Per stampare\nLa carta del rischio (VRD) | La carta del rischio (VRD)\n\nPer stampare\nNel testalino compaiono il codice del progetto e l’identificativo dell’area di rischio, ma è modificabile a seconda delle esigenze: è necessario evidenziarlo e poi inserire nelle proprietà i dati desiderati in aggiunta o in sostituzione al titolo attualmente presente. È possibile inserire del testo statico, del testo dinamico da espressione, delle immagini (un logo ad esempio) ecc., inserendo anche più frame combinati tra loro..."
+  },
+  {
+    "question": "Quale sistema di riferimento è stato scelto come Datum per il progetto del Geoportale Nazionale Archeologia (GNA)?",
+    "relevant_docs": [
+      "b79f1c6d98caf2306b1209ffa8e7b39d4518e20876e10ec1d94d7f8ef49645a2"
+    ],
+    "document_content": "Il progetto\nPrima di cominciare | I sistemi di riferimento: alcune osservazioni e qualche errore da non fare | I sistemi di riferimento: alcune osservazioni e qualche errore da non fare\n\nIl progetto\nFrancesco Marucci Come Datum del sistema di riferimento è stato scelto il WGS84 , per avere una perfetta sovrapposizione con le cartografie di base più diffuse e più utili nel disegno delle geometrie necessarie al GNA (primi fra tutti i diversi strati di OSM), ma anche le foto satellitari, come Bing e Google. Co..."
+  },
+  {
+    "question": "Quali sono i diversi tipi di MOSI previsti nel progetto?",
+    "relevant_docs": [
+      "cac6172a087154b6a2ef2f602ba3033b797e4e76d0bca3429857b3873d03efd3"
+    ],
+    "document_content": "Compilare il MOSI\nPremessa | Premessa\n\nCompilare il MOSI\nNel progetto sono previsti MOSI puntuali ( MOSI_multipoint ), lineari ( MOSI_multilinea ) e areali ( MOSI_multipolygon ), che differiscono tra loro esclusivamente nel tipo di geometria. Tutti i layer gestiscono l'inserimento di multigeometrie. Nel progetto sono previsti MOSI puntuali ( MOSI_multipoint ), lineari ( MOSI_multilinea ) e areali ( MOSI_multipolygon ), che differiscono tra loro esclusivamente nel tipo di geometria. Tutti i layer gestiscono l'inse..."
+  },
+  {
+    "question": "Qual è la simbologia utilizzata per il layer \"MOSI_multipolygon\" in QGIS?",
+    "relevant_docs": [
+      "816cb323d04d5019e94715758b553173b21637b8aa7579a560024234415cc784"
+    ],
+    "document_content": "Brevi note su QGIS\nIndice | Simbologia ed etichettatura\n\nBrevi note su QGIS\nQProprietLayer-MOSI_multipolygonTEtic\n\n(i   Informazioni\n\nw@  Sorgente\n\nid  Simbologia\n@baEtichette\n\n[abc]  Maschere\n\nN   Vista3D\n\naboTesto\nt32Formattazione\naboBuffer                                    VIvabit\n\nCa                         Pio                    spe\n\n@s(0000                                                                                             ves\nOmbreggiature           Pkl_E\n\n_LineediRichiamo                   =\n     ..."
+  },
+  {
+    "question": "Quali sono le informazioni che devono essere stampate per il MOPR?",
+    "relevant_docs": [
+      "ab8ad079189ed61a9386990000abf7348078d459d9a243fc3fe9d7959fd52d66"
+    ],
+    "document_content": "Per stampare\nStampare il MOPR\n\nPer stampare\n- Descrizione dell’opera in progetto (DES)\n- Geomorfologia del territorio (CAE)\n- Caratteri ambientali storici (CAS)\n- Caratteri ambientali attuali (CAA)\n- Sintesi storico archeologica (CAV)..."
+  },
+  {
+    "question": "Qual è l'obiettivo della versione 1.4.2 del Geoportale Nazionale Archeologia (GNA) per quanto riguarda la registrazione dei riferimenti cronologici?",
+    "relevant_docs": [
+      "bcd3fcddc3424bb3a5a1c5b5956eaa711f8110f793d3013f1cd484216b903d9d"
+    ],
+    "document_content": "Vocabolario DTR\n\n\nVocabolario DTR\nIn questo modo, pur non rinunciando alla cronologia assoluta, necessaria per le ricerche sull'intera banca dati, il GNA promuove la costruzione di un thesaurus di definizioni cronologico/culturali, primo passo per contribuire ai gazetteer internazionali (l'esempio più noto è il progetto PeriodO ), in cui oggi tali definizioni non sono attestate. Con la versione 1.4.2 la registrazione dei riferimenti cronologici è stata modificata con l'obiettivo di avere indicazioni assolute ch..."
+  },
+  {
+    "question": "Quale sistema di riferimento è stato scelto per il progetto?",
+    "relevant_docs": [
+      "7c9547cda2d64a65515a49924a0b8035df33d2e6973e16b466bbb1bf524802f0"
+    ],
+    "document_content": "Il progetto\nPrima di cominciare | I sistemi di riferimento: alcune osservazioni e qualche errore da non fare | I sistemi di riferimento: alcune osservazioni e qualche errore da non fare\n\nIl progetto\nÈ necessaria quindi l'applicazione di algoritmi di trasformazione basata sui grigliati NTv2 , gli unici in grado di ridurre gli errori a livello di centimetri. La scelta del sistema di riferimento dei dati e del progetto fatta verso il Datum WGS84, sottintende che il caricamento all'interno del progetto Template..."
+  },
+  {
+    "question": "Qual è la relazione tra il valore e l'etichetta associata in un vocabolario GPBB?",
+    "relevant_docs": [
+      "3bea4785f4226072a63aeca5ccff8fd8269d8ff0287fd1e912eaa2535fe1fc65"
+    ],
+    "document_content": "Vocabolario GPBB\n\n\nVocabolario GPBB\nNella struttura del progetto tutti i vocabolari sono numerici, registrati come tali e possono seguire un ordine apparentemente casuale dovuto all'aggiunta di termini nel tempo. Il valore è l'etichetta associata. Nella struttura del progetto tutti i vocabolari sono numerici, registrati come tali e possono seguire un ordine apparentemente casuale dovuto all'aggiunta di termini nel tempo. Il valore è l'etichetta associata...."
+  },
+  {
+    "question": "Qual è il risultato della stampa dell'esempio \"Oggi c’era il sole.<br>Io sono andato al mare.\" quando le istruzioni HTML sono attivate?",
+    "relevant_docs": [
+      "f6dbe5dbfa501a3c29fdb164ee8ee204845f6c5b07c504bff455fab407794c2d"
+    ],
+    "document_content": "Brevi note su QGIS\nIndice | Istruzioni HTML | Istruzioni HTML\n\nBrevi note su QGIS\nEsempio: \"Oggi c’era il sole.<br>Io sono andato al mare.\" produce in fase di stampa il seguente risultato: Esempio: \"Oggi c’era il sole.<br>Io sono andato al mare.\" produce in fase di stampa il seguente risultato: Oggi c’era il sole. Oggi c’era il sole. Io sono andato al mare. Io sono andato al mare. Per poter visualizzare il risultato delle istruzioni HTML è necessario che sia attivata la casella corrispondente (Visualizza come HTML..."
+  },
+  {
+    "question": "Quali sono le avvertenze da seguire per utilizzare il progetto?",
+    "relevant_docs": [
+      "f6ffe421a10e78b6eb9a6092671043c3d523cfe6b2fc95be2090f9ebd849f8b5"
+    ],
+    "document_content": "Il progetto\nAlcune avvertenze | Il codice personale | Il codice personale\n\nIl progetto\nSi prega di leggere attentamente queste brevi note e di seguirle. Nel caso ci siano delle mancanze nelle istruzioni o delle incertezze nell'applicazione si prega di scrivere a dg-abap.gna@cultura.gov.it per chiarimenti. Si prega di leggere attentamente queste brevi note e di seguirle. Nel caso ci siano delle mancanze nelle istruzioni o delle incertezze nell'applicazione si prega di scrivere a dg-abap.gna@cultura.gov.it pe..."
+  },
+  {
+    "question": "Quali sono le informazioni da inserire nel layer VRP - Carta del potenziale quando si compila il MOPR?",
+    "relevant_docs": [
+      "6c5c1af0567b412b3dd4ed657efe1820b14d74df1cd2a8d0101805ca1b658b4b"
+    ],
+    "document_content": "Compilare il MOPR\nDati progetto | Inserire i dati nei layer collegati | VRP - Carta del potenziale | VRP - Carta del potenziale\n\nCompilare il MOPR\nSpetta al professionista fare le necessarie valutazioni, esplicitandole nel paragrafo VRP dei MOSI e sintetizzandole  nel campo VRPV del layer VRP. Si ricorda inoltre che le valutazioni inserite all’interno del layer MOSI sono riferite ai singoli siti/aree/evidenze censiti, mentre il layer VRP serve a delimitare una o più macroaree a\npotenziale omogeneo, individuate pr..."
+  },
+  {
+    "question": "Qual è la procedura adottata per il caso di Fano nel corso della ricerca di archivio?",
+    "relevant_docs": [
+      "052f34b4e8c6860d9c55f6f3e24e4343a2cd0514d24e126f0f1dd6acb3eff572"
+    ],
+    "document_content": "Qualche applicazione specifica\nUtilizzo del Template per la redazione di una carta archeologica | La ricerca d’archivio | La ricerca d’archivio\n\nQualche applicazione specifica\nSpendo qualche riga per descrivere la procedura adottata per il caso di Fano nel corso della ricerca di archivio, che si è dimostrata utile per semplificare e velocizzare la compilazione dei MOSI (il lavoro è ancora in corso e a oggi sono stati inseriti circa duecento MOSI all’interno del Template su Fano). Durante la ricerca di archivio sono stati acqu..."
+  },
+  {
+    "question": "Quali sono le indicazioni generali per stampare un layer WMS nel Geoportale Nazionale Archeologia?",
+    "relevant_docs": [
+      "2990a5299331a5e77d60daff36273343557722cc817526e5bd07bfb777b05773"
+    ],
+    "document_content": "Per stampare\nIndicazioni generali\n\nPer stampare\nQIlProgettocontienelayerWMS                                                                                                                                                         X\n\nAlcuniserverWMS(es,UMNmapserver)hannodeilimitiperparametridiLARGHEZZAeALTEZZAStamparelayerda_questiserverpub\nsuperareillimiteimposto,Intalcaso,illayerWMSnonverrstampato\n\nNon_mostrarenuovamentequestomessaggio\n\n..."
+  },
+  {
+    "question": "Quali sono le brevi note su QGIS?",
+    "relevant_docs": [
+      "01ef81d58533ec9e6f2cb0dc736e9be7ae930b74eea6632f72091bef96c0df80"
+    ],
+    "document_content": "Brevi note su QGIS\nIndice | Istruzioni HTML\n\nBrevi note su QGIS\n- non è necessario inserire un’istruzione di fine..."
+  },
+  {
+    "question": "Qual è la procedura per aggiornare la classificazione dei layer MOSI in QGIS?",
+    "relevant_docs": [
+      "b319d2a127c2453be15158234bdbb2ad8ba93b02d054cf6211673eced220da47"
+    ],
+    "document_content": "Brevi note su QGIS\nIndice | Simbologia ed etichettatura | Simbologia ed etichettatura\n\nBrevi note su QGIS\nIl progetto contiene tre layer MOSI che hanno una categorizzazione (caratterizzazione) preimpostata sulla base del campo OGD (Definizione). Per vedere realmente il risultato è necessario però, dopo aver inserito un certo numero di schede, procedere al refresh della classificazione mediante la seguente procedura: Il progetto contiene tre layer MOSI che hanno una categorizzazione (caratterizzazione) preimpostata..."
+  },
+  {
+    "question": "Qual è la procedura per riutilizzare vecchi MOSI e importare dati tra due template diversi nel Geoportale Nazionale Archeologia?",
+    "relevant_docs": [
+      "04a7b69436e76dd3d1f2566dbb08fa4153ac144e30d4b6639f1b588d2305394c"
+    ],
+    "document_content": "Riutilizzare vecchi MOSI\nImportazione dei dati tra due Template diversi (da versione 1.3 a versione 1.3)\n\nRiutilizzare vecchi MOSI\n@onaGeosonzieNarsoraleporlAnteciogia-Tompime-QG5[Met\n\nProgettoMoccsVaubszaLoyerImpentasonFhugraVengneBameOstedmoVieMedFrocmangCuade\nDeBaR:OosA55pra-sbetB0c_E-n-G-_omerm-a-pa,\nROVARBEO4/9-f-macoloe_Mi-nrsapranproreee\nBx_O-@-F/r-dmz-i;i_daRz_0do_nNemi:nme_neR_QIE\n\ntend\nCLAATALII  mazda\n_AiAlea_ventage                        a    \\     DI\nBuon                 ,      7\nLU]     -moei             ..."
+  },
+  {
+    "question": "Qual è il layout consigliato per stampare i dettagli della visibilità delle diverse aree di ricognizione?",
+    "relevant_docs": [
+      "d3d83126587b68c5b47c7eba90eeff048c483d70adf1880d6456850db1465055"
+    ],
+    "document_content": "Per stampare\nLe carte del potenziale | Carta del potenziale | Carta del potenziale\n\nPer stampare\nSe si ritiene necessario è possibile inserire una numerazione di pagina. Il layout Visibilità_suolo permette di stampare in un’unica mappa i dettagli della visibilità delle diverse aree di ricognizione. Per adattare il layout alle proprie esigenze è necessario modificare la scala e accertarsi che il layer sia acceso. Il layout Visibilità_suolo permette di stampare in un’unica mappa i dettagli della visibilità del..."
+  },
+  {
+    "question": "Qual è la definizione di MOPR nella struttura del progetto?",
+    "relevant_docs": [
+      "2d41d9beeed37c042a079e0a5ceb2722b560cf21c06f31030218579a97ad80e2"
+    ],
+    "document_content": "La struttura del progetto\n\n\nLa struttura del progetto\nIn fase di redazione di un documento di valutazione il MOPR corrisponde all’area vasta interessata dallo studio preliminare di cui all’art. 25, c. 1 del D.Lgs 50/2016 . I layer vettoriali relativi alle aree occupate dalle lavorazioni previste dalla bozza di progetto esistente al momento in cui il soggetto incaricato della redazione del documento compila il template è invece demandata al semplice caricamento dei layer - preferibilmente vettoriali, oppure raster georife..."
+  },
+  {
+    "question": "Qual è il progetto a cui il GNA contribuisce per la costruzione di un thesaurus di definizioni cronologico/culturali?",
+    "relevant_docs": [
+      "b90c3ce4973901be2bbb27644f56f23417c568ee852275dfe1c3bce36c1f1411"
+    ],
+    "document_content": "Vocabolario DTR\n\n\nVocabolario DTR\n), insieme a un riferimento bibliografico/fonte autorevole . In questo modo, pur non rinunciando alla cronologia assoluta, necessaria per le ricerche sull'intera banca dati, il GNA promuove la costruzione di un thesaurus di definizioni cronologico/culturali, primo passo per contribuire ai gazetteer internazionali (l'esempio più noto è il progetto PeriodO ), in cui oggi tali definizioni non sono attestate...."
+  },
+  {
+    "question": "Quali sono le istruzioni operative per il conferimento al GNA dei dati minimi di tutte le ricerche archeologiche dirette dal Ministero della Cultura?",
+    "relevant_docs": [
+      "58f7c91fea2f1c170ba86131e497a47fa33fa3ab00faef99dc1187af1451cd49"
+    ],
+    "document_content": "Istruzioni operative\nIstruzioni operative per il conferimento al GNA dei dati minimi di tutte le ricerche archeologiche dirette dal Ministero della Cultura | Istruzioni operative per il conferimento al GNA dei dati minimi di tutte le ricerche archeologiche dirette dal Ministero della Cultura\n\nIstruzioni operative\nPROGETTO RAPTOR (Ricerca Archivi e Pratiche per la Tutela Operativa Regionale): Raccolta dei dati per la relazione di assoggettabilità a VPIA : la ditta/il professionista usa il template ministeriale per lo..."
+  },
+  {
+    "question": "Qual è la struttura del progetto del Geoportale Nazionale dell'Archeologia?",
+    "relevant_docs": [
+      "1dc36c50b990b12bc292e253017ad351125a2767d4f12ce04af89e75f5e06618"
+    ],
+    "document_content": "Il progetto\nIndice\n\nIl progetto\n- 1 Premessa\n- 2 Finalità del progetto Geoportale Nazionale dell’Archeologia\n- 3 La struttura del progetto\n- 4 La struttura del progetto. WMS e mappe di base 4.1 La cartella del progetto\n- 5 Alcune avvertenze 5.1 Il codice personale 5.2 Criticità, malfunzionamenti, richieste di integrazioni/modifiche 5.3 Livello di dettaglio 5.4 Dati negativi e assenza di ritrovamenti 5.5 Indicazioni redazionali\n- 6 Prima di cominciare 6.1 Una nota su QGIS 6.2 I campi della localizzazione 6.2..."
+  },
+  {
+    "question": "Quali sono i dati da inserire nei layer collegati per compilare il MOPR?",
+    "relevant_docs": [
+      "251e7e2f835cde8e903b96878399b96b02e9dce51036aa145a185ede747162ea"
+    ],
+    "document_content": "Compilare il MOPR\nDati progetto | Inserire i dati nei layer collegati | VRD - Carta del rischio | VRD - Carta del rischio\n\nCompilare il MOPR\nTorna su Torna su Vai all'Indice Vai all'Indice..."
+  },
+  {
+    "question": "Quali sono le applicazioni specifiche utilizzate per la rappresentazione dei MOSI nel Template per la redazione di una carta archeologica?",
+    "relevant_docs": [
+      "f769d941f70a079a3baa0e213064c4b53530a4edf0e787bc83f51c09df9c9649"
+    ],
+    "document_content": "Qualche applicazione specifica\nUtilizzo del Template per la redazione di una carta archeologica | La compilazione del Template | La compilazione del Template\n\nQualche applicazione specifica\nPer la rappresentazione dei MOSI sono stati utilizzati prevalentemente poligoni, soprattutto nel caso di strutture per le quali sono note, almeno in parte, le planimetrie o le estensioni, mentre le linee sono state utilizzate per indicare la rete fognaria, le ipotesi ricostruttive di fogne e strade. Per la rappresentazione dei MOSI sono st..."
+  },
+  {
+    "question": "Qual è il significato di \"Vocabolario CTG-OGT\" nel contesto del Geoportale Nazionale Archeologia (GNA)?",
+    "relevant_docs": [
+      "eacc25c904198f730d9b9bb2aba44fae6f370f78a8baddb6788e0b64058d20fe"
+    ],
+    "document_content": "Vocabolario CTG-OGT\n\n\nVocabolario CTG-OGT\nTorna indietro Torna indietro..."
+  },
+  {
+    "question": "Come si compila il MOPR nel Geoportale Nazionale Archeologia?",
+    "relevant_docs": [
+      "61d44f32a28e8786da916e7ed3e95a0cfdc62ec512dde3698ca448a2fa9be64a"
+    ],
+    "document_content": "Compilare il MOPR\nDati progetto | Caricare i MOSI da GNA. L'uso del plugin\n\nCompilare il MOPR\nNome                                                                   URL\nRepositoryGNA                                       https://gna,culturagoviit/qgis/plugins/pluginsxml?ggis=3,28\n..."
+  },
+  {
+    "question": "Quali sono le informazioni presenti nel manuale relative alla struttura e alle caratteristiche della banca dati GNA?",
+    "relevant_docs": [
+      "773fe1d7a7ce80466f3d12a305378d2bbfc2afcfefd69852cc2f5e2dde88683d"
+    ],
+    "document_content": "Il progetto\nPremessa | Premessa\n\nIl progetto\nAll'interno del manuale è possibile reperire le informazioni di dettaglio relative alla struttura, alle caratteristiche e alle modalità di compilazione dei singoli campi della banca dati GNA, raccolte all'interno di tabelle; sono inoltre presenti indicazioni più generiche relative al tipo di scelte progettuali effettuate, alla modalità di svolgimento di specifiche operazioni tecniche, a specifici casi d'uso, che possono guidare l'utente nella compilazione. Per fa..."
+  },
+  {
+    "question": "Quali sono le chiavi del vocabolario GPBB?",
+    "relevant_docs": [
+      "6f00860f3514207cb3022132bf2558b71d59b0c41349eb0d5a66c5b7703563f6"
+    ],
+    "document_content": "Vocabolario GPBB\n\n\nVocabolario GPBB\n|   GPBB_chiave | GPBB_valore                      |\n|--------------:|:---------------------------------|\n|             1 | Carta Tecnica Comunale (CTC)     |\n|             2 | Carta Tecnica Regionale (CTR)    |\n|             3 | cartografia catastale vettoriale |\n|             4 | cartografia catastale WMS        |\n|             5 | rilievo sul campo                |\n|             6 | altro (specificare nelle note)   |..."
+  },
+  {
+    "question": "Quali sono le istruzioni operative per il conferimento al GNA dei dati minimi di tutte le ricerche archeologiche dirette dal Ministero della Cultura?",
+    "relevant_docs": [
+      "c49be1259f20f1213cad9e9b261b41bc17f941cd62c773396f02d1e2fadc8114"
+    ],
+    "document_content": "Istruzioni operative\nIstruzioni operative per il conferimento al GNA dei dati minimi di tutte le ricerche archeologiche dirette dal Ministero della Cultura | Istruzioni operative per il conferimento al GNA dei dati minimi di tutte le ricerche archeologiche dirette dal Ministero della Cultura\n\nIstruzioni operative\n1, c. 2 dell’allegato I.8, come confermato dalla Circolare n. 32/2023. I dati possono essere riutilizzati senza modifiche oppure, se si riscontrano errori o imprecisioni nei dati alfanumerici o nel posizion..."
+  },
+  {
+    "question": "Qual è la differenza tra il MOPR e il MOPR GENERICO?",
+    "relevant_docs": [
+      "754bbfed40f002057ae6c1308a67ad8ec245e359933671cbbe0432aedf69c181"
+    ],
+    "document_content": "Compilare il MOPR\nIl Modulo di Progetto (MOPR e MOPR GENERICO) | Il Modulo di Progetto (MOPR e MOPR GENERICO)\n\nCompilare il MOPR\nSi precisa che la distinzione tra MOPR e MOPR GENERICO è esclusivamente nella visualizzazione e nella gestione delle obbligatorietà. La compilazione alimenta sempre lo stesso layer, la geometria è una e univoci sono i dati associati. La compilazione parte dal disegno sulla mappa del perimetro di una geometria che deve comprendere l’intera area di studio (buffer) all’interno della quale ..."
+  },
+  {
+    "question": "Quali sono le chiavi del vocabolario GPBB?",
+    "relevant_docs": [
+      "6f00860f3514207cb3022132bf2558b71d59b0c41349eb0d5a66c5b7703563f6"
+    ],
+    "document_content": "Vocabolario GPBB\n\n\nVocabolario GPBB\n|   GPBB_chiave | GPBB_valore                      |\n|--------------:|:---------------------------------|\n|             1 | Carta Tecnica Comunale (CTC)     |\n|             2 | Carta Tecnica Regionale (CTR)    |\n|             3 | cartografia catastale vettoriale |\n|             4 | cartografia catastale WMS        |\n|             5 | rilievo sul campo                |\n|             6 | altro (specificare nelle note)   |..."
+  },
+  {
+    "question": "Qual è la funzione del layer DSC multipolygon nel Geoportale Nazionale Archeologia?",
+    "relevant_docs": [
+      "bd39f26a257ac93789f4a319e452299e86cd44a59fc0b744406085e95b3d90c9"
+    ],
+    "document_content": "DSC multipolygon\nPremessa | Premessa\n\nDSC multipolygon\nsulla base della profondità raggiunta). I layer DSC sono multigeometria: dopo aver salvato la tabella delle informazioni alfanumeriche e il primo elemento, è possibile aggiungerne altri che acquisiranno le medesime informazioni. In questo modo si può  documentare l’estensione esatta di una serie di saggi o trincee eseguite nella stessa occasione e con caratteristiche simili (es. sulla base della profondità raggiunta). Il layer è anche funzionale all’uso come..."
+  },
+  {
+    "question": "Quali sono le leggi e i decreti legislativi elencati nel vocabolario NVCT?",
+    "relevant_docs": [
+      "08cdc15ce2ef976134c66ef87f5f2f36ee285eccecc29f10f65acbf5ecf52b86"
+    ],
+    "document_content": "Vocabolario NVCT\n\n\nVocabolario NVCT\n|   NVCT_chiave | NVCT_valore     |\n|--------------:|:----------------|\n|             1 | L. 364/1909     |\n|             2 | L. 778/1922     |\n|             3 | L. 1089/1939    |\n|             4 | L. 1497/1939    |\n|             5 | D.Lgs. 490/1999 |\n|             6 | D.Lgs. 42/2004  |..."
+  },
+  {
+    "question": "Quali sono le chiavi del vocabolario GPBB e i relativi valori?",
+    "relevant_docs": [
+      "2d7e2367ead8a42db7d5945cc3532b0dd9b8a93878b74ec10938b02abd682097"
+    ],
+    "document_content": "Vocabolario GPBB\n\n\nVocabolario GPBB\n|   GPBB_chiave | GPBB_valore                      |\n|--------------:|:---------------------------------|\n|             1 | Carta Tecnica Comunale (CTC)     |\n|             2 | Carta Tecnica Regionale (CTR)    |\n|             3 | cartografia catastale vettoriale |\n|             4 | cartografia catastale WMS        |\n|             5 | rilievo sul campo                |\n|             6 | altro (specificare nelle note)   |..."
+  },
+  {
+    "question": "Quali sono le informazioni che devono essere indicate nel layer DSC per rappresentare le indagini di scavo nel Geoportale Nazionale Archeologia?",
+    "relevant_docs": [
+      "10fae61a12f6620aa81d1f1cca7c373df19287045336a71f3d527e120a329c77"
+    ],
+    "document_content": "Il progetto\nAlcune avvertenze | Dati negativi e assenza di ritrovamenti | Dati negativi e assenza di ritrovamenti\n\nIl progetto\nTutte le indagini di scavo vengono rappresentate tramite il layer DSC, che indica l'esatta estensione dell'area indagata e nel quale è previsto un campo apposito per registrare l'esito, positivo o negativo, dello scavo. Nel layer DSC è inoltre necessario indicare la quota di fine scavo ed è possibile indicare l'eventuale presenza di materiali archeologici in giacitura secondaria (in..."
+  },
+  {
+    "question": "Qual è la procedura adottata per il caso di Fano nel corso della ricerca di archivio che ha semplificato e velocizzato la compilazione dei MOSI?",
+    "relevant_docs": [
+      "052f34b4e8c6860d9c55f6f3e24e4343a2cd0514d24e126f0f1dd6acb3eff572"
+    ],
+    "document_content": "Qualche applicazione specifica\nUtilizzo del Template per la redazione di una carta archeologica | La ricerca d’archivio | La ricerca d’archivio\n\nQualche applicazione specifica\nSpendo qualche riga per descrivere la procedura adottata per il caso di Fano nel corso della ricerca di archivio, che si è dimostrata utile per semplificare e velocizzare la compilazione dei MOSI (il lavoro è ancora in corso e a oggi sono stati inseriti circa duecento MOSI all’interno del Template su Fano). Durante la ricerca di archivio sono stati acqu..."
+  },
+  {
+    "question": "Quali sono le possibili cause di problemi di visualizzazione dei layer in QGIS?",
+    "relevant_docs": [
+      "b764d49142e793d3d7be009ddaef9a6cd4e322a13dad717d32dc92570509f64d"
+    ],
+    "document_content": "Brevi note su QGIS\nIndice | I servizi di mappa esterni (WMS/WFS) | I servizi di mappa esterni (WMS/WFS)\n\nBrevi note su QGIS\nPuò capitare che la fruizione di tale layer sia temporaneamente non disponibile, per cause totalmente indipendenti dall’utente del Template e dal GNA, ma legate all’ente che eroga il servizio. Gli stessi problemi di visualizzazione si possono riscontrare anche in caso di utilizzo di altri servizi autonomamente caricati dall’utente. È possibile aggiungere diverse cartografie WMS (carte CTR, ca..."
+  },
+  {
+    "question": "Quali sono i layer del progetto destinati a raccogliere i dati sulle emergenze?",
+    "relevant_docs": [
+      "6b9db00e01c3848649609369fc831b208161d2dd5c3b7915dfc80354e6dddc21"
+    ],
+    "document_content": "La struttura del progetto\n\n\nLa struttura del progetto\n- Un gruppo di tre layer MOSI identici tra loro, che differiscono solo per tipo di geometria, destinati a raccogliere i dati sulle emergenze. I layer sono multigeometria, ovvero accettano l’inserimento di più elementi, anche non contigui, per un’unica occorrenza\n- Un gruppo di layer che servono a descrivere gli eventi (ricognizioni o scavi) che hanno portato all’individuazione di strutture, materiali o altre tracce archeologicamente rilevanti e che sono la raffigurazi..."
+  },
+  {
+    "question": "Come posso caricare i dati GNA relativi ad un Modulo di Progetto (MOPR) in QGIS?",
+    "relevant_docs": [
+      "b6a14b640955242c2ab6d530bae966dc82e4dded13288f0ef1df8385ecd8c8e8"
+    ],
+    "document_content": "Compilare il MOPR\nDati progetto | Caricare i MOSI da GNA. L'uso del plugin | Caricare i MOSI da GNA. L'uso del plugin\n\nCompilare il MOPR\nTorna su Torna su Francesco Marucci Francesco Marucci Sul repository di plugin per QGIS del GNA è disponibile il \"Plugin GNA\" che permette di dialogare con il Geoportale per caricare direttamente in QGIS i dati GNA relativi ad un determinato Modulo di Progetto (MOPR) ed in futuro di consegnare nel GNA il Modulo di Progetto, in modo che venga rapidamente messo a disposizione di t..."
+  },
+  {
+    "question": "Quali sono le basi topografiche del progetto utilizzate per la georeferenziazione dei dati di scavo e dei siti archeologici nel centro storico di Fano?",
+    "relevant_docs": [
+      "12ebf35f8a7818517e6606841687e5316f1bfac1aa1a8538faa528c6a6a00cdd"
+    ],
+    "document_content": "Qualche applicazione specifica\nUtilizzo del Template per la redazione di una carta archeologica | Prima di inserire i dati nel Template | Prima di inserire i dati nel Template\n\nQualche applicazione specifica\nLe basi topografiche del progetto sono inserite in un gruppo denominato Cartografia Tecnica in cui si trovano le principali piante vettoriali del centro storico di Fano che forniscono gradi di dettaglio differenziato, ma che sono risultate fondamentali per la georeferenziazione della maggior parte dei dati di scavo e dei ..."
+  },
+  {
+    "question": "Qual è il metodo di rappresentazione utilizzato per delimitare l'area a rischio archeologico per la presenza di necropoli nel PRG del Comune di Torino?",
+    "relevant_docs": [
+      "704ef3eceab93e35907caa133208455820d408f90ea62a1b79bb5c8e9a92252c"
+    ],
+    "document_content": "Casi d'uso\nCasi d'uso | Rappresentare elementi molto piccoli | Rappresentare elementi molto piccoli\n\nCasi d'uso\nUn altro MOSI poligonale descrive invece in maniera più generica quella che doveva essere una vasta necropoli oltre la Dora. Non abbiamo alcuna certezza sulla sua estensione e pertanto si è scelto di delimitare l’area che nel PRG del Comune di Torino è perimetrata come a rischio archeologico per la presenza di necropoli, indicando Metodo di rappresentazione = posizionamento con rappresentazione s..."
+  },
+  {
+    "question": "Qual è il modo per compilare il MOPR nel Geoportale Nazionale Archeologia?",
+    "relevant_docs": [
+      "db0da66abb0919cd3c8eb4af5b2bdc520e26e650c68f506c9335635edaee3dcf"
+    ],
+    "document_content": "Compilare il MOPR\nDati progetto | Dati progetto\n\nCompilare il MOPR\nTorna su Torna su..."
+  },
+  {
+    "question": "Quali sono le modifiche apportate alla cartografia di base utilizzando QGIS?",
+    "relevant_docs": [
+      "d59e4a33727fcc271583c3348e019c370c6463591961d415c9c8f6df10bc4f38"
+    ],
+    "document_content": "Brevi note su QGIS\nIndice | I servizi di mappa esterni (WMS/WFS)\n\nBrevi note su QGIS\n- La mappa prima delle modifiche alla cartografia di base\n- La mappa dopo le modifiche alla cartografia di base..."
+  },
+  {
+    "question": "Quali sono i dati da inserire nei layer collegati per compilare il MOPR?",
+    "relevant_docs": [
+      "7d2bfa62b0ba522f303b299609eb63eb11f7e6c7a436ce2533f00c9521d10cf6"
+    ],
+    "document_content": "Compilare il MOPR\nDati progetto | Inserire i dati nei layer collegati | VRD - Carta del rischio | VRD - Carta del rischio\n\nCompilare il MOPR\nA ogni singolo caso possono essere applicabili anche solo alcune delle casistiche presentate nel prospetto e gli esempi presentati offrono esclusivamente un quadro di riferimento non esaustivo. Le valutazioni del professionista rispetto all'intero progetto dovranno essere esplicitate in maniera discorsiva nel campo VRDN del layer VRD...."
+  },
+  {
+    "question": "Come posso richiedere il codice univoco per MOPR?",
+    "relevant_docs": [
+      "c7d97bd4b05add56bca22754563d10755a460deec73b487256b85d68d0b8fdbd"
+    ],
+    "document_content": "Il progetto\nAlcune avvertenze | Criticità, malfunzionamenti, richieste di integrazioni/modifiche | Criticità, malfunzionamenti, richieste di integrazioni/modifiche\n\nIl progetto\nInviare una mail con oggetto Richiesta codice univoco per MOPR all’indirizzo dg-abap.gna@cultura.gov.it , specificando nome e cognome e indirizzo mail. È possibile richiedere il codice come professionisti e come ditte, utilizzando l’uno o l’altro a seconda del caso. La numerazione progressiva deve essere univoca rispetto al codice pr..."
+  },
+  {
+    "question": "Quali sono le aree che devono essere incluse nel Modulo di Progetto (MOPR) per la raccolta dei dati di censimento?",
+    "relevant_docs": [
+      "703881b631a886ac7637b8440bba8e5d5d91b6a0abd5a73c4a067133f7ad8d16"
+    ],
+    "document_content": "Compilare il MOPR\nIl Modulo di Progetto (MOPR e MOPR GENERICO) | Il Modulo di Progetto (MOPR e MOPR GENERICO)\n\nCompilare il MOPR\nall’interno della quale è stato effettuato il censimento, qualunque sia lo scopo della raccolta dei dati. L'area, pur essendo più vasta rispetto all’area direttamente interessata dalle lavorazioni, deve essere ragionevolmente circoscritta da parte degli uffici competenti, ove non stabilita per legge (ad es., per gli impianti eolici, dalle linee guida di cui al D.M. MiSE 10/09/2010): è i..."
+  },
+  {
+    "question": "Qual è la struttura del progetto?",
+    "relevant_docs": [
+      "50faf2f8c0b87f308281d0512d116588fd2750efcd4ef07822d6de5aa9bb7277"
+    ],
+    "document_content": "La struttura del progetto\n\n\nLa struttura del progetto\nLa struttura del progetto è così organizzata: La struttura del progetto è così organizzata:..."
+  },
+  {
+    "question": "Quali sono le avvertenze da considerare nel caso in cui l'attribuzione a complesso termale pubblico o ambienti termali privati sia dubbia o non disponibile?",
+    "relevant_docs": [
+      "f074278639410250d4d60638b602ad8c9e925c8d6902d5eaed58a5cd7a030c56"
+    ],
+    "document_content": "Il progetto\nAlcune avvertenze | Livello di dettaglio | Livello di dettaglio\n\nIl progetto\nNel caso, infine, in cui l’attribuzione rispettivamente a complesso termale pubblico o ambienti termali privati sia dubbia o non disponibile (ad esempio riferibile genericamente ad ambienti riscaldati, solo ipoteticamente termali) si dovrà ricorrere a indicazioni più generiche, inserendo in descrizione tutti gli elementi utili alla conoscenza del bene. La tipologia di documenti censiti e le fonti informative (segnalazio..."
+  },
+  {
+    "question": "Qual è lo step principale da seguire prima della compilazione del Template per la redazione di una carta archeologica?",
+    "relevant_docs": [
+      "987ff946532440b4a3a8fe91fb455a4ed8e57742e9cf6efe9529d51b88fa9078"
+    ],
+    "document_content": "Qualche applicazione specifica\nUtilizzo del Template per la redazione di una carta archeologica | Prima di inserire i dati nel Template | Prima di inserire i dati nel Template\n\nQualche applicazione specifica\nStruttura dei Gruppi all’interno del Template Lo step principale prima della compilazione del Template è stato quello di procurarsi le basi topografiche necessarie per la georeferenziazione dei siti. Le basi topografiche del progetto sono inserite in un gruppo denominato Cartografia Tecnica in cui si trovano le principali..."
+  },
+  {
+    "question": "Qual è la domanda a cui il testo \"Vocabolario GPT\" risponde?",
+    "relevant_docs": [
+      "dac2d61bf5a05091feb0608ab17e49a0836a369e9a74a50bae53d45efe1b8730"
+    ],
+    "document_content": "Vocabolario GPT\n\n\nVocabolario GPT\nTorna indietro Torna indietro..."
+  },
+  {
+    "question": "Quali sono i campi obbligatori che risulteranno già compilati dopo aver inserito la geometria della ricognizione nella scheda del progetto (MOPR)?",
+    "relevant_docs": [
+      "5177f61d4c7c13621a010e4b9b0452ddccfdda74057471eba7170519f3d08661"
+    ],
+    "document_content": "Compilare il MOPR\nDati progetto | Inserire i dati nei layer collegati | Scavo | Scavo\n\nCompilare il MOPR\n). Inserendo la geometria della ricognizione dall’interno della scheda del progetto (MOPR) parte dei campi obbligatori risulterà già compilata. Prima di passare al disegno delle geometrie di dettaglio è necessario compilare e salvare la scheda RCG (un record per ogni MOPR), che identifica la campagna di ricognizione. Si raccomanda di NON inserire le parti di dettaglio dall’interno della scheda di progetto ma d..."
+  },
+  {
+    "question": "Quali informazioni aggiuntive è possibile inserire nel campo GEN (Note) per dettagliare la base cartografica di riferimento?",
+    "relevant_docs": [
+      "ad8c66a3b0db0c96189b6966eebf3a2f2f31314966604bb213643d51a96dda11"
+    ],
+    "document_content": "Il progetto\nPrima di cominciare | I campi della localizzazione | Le localizzazioni nello spazio marittimo | Le localizzazioni nello spazio marittimo\n\nIl progetto\nNel campo GEN (Note) è anche possibile inserire informazioni aggiuntive rispetto ad eventuali criticità o commenti da fare sulla georeferenziazione. La compilazione obbligatoria di GPBB (Base cartografica di riferimento) è basata su un sintetico vocabolario che è possibile dettagliare nel campo GEN (Note), inserendo ad esempio l’anno della cartogra..."
+  },
+  {
+    "question": "Quali sono i casi d'uso del Geoportale Nazionale Archeologia?",
+    "relevant_docs": [
+      "e6b24f01758cfaf7f40fc292aced0cf243352b59d95a0942b966e2a07e290fca"
+    ],
+    "document_content": "Casi d'uso\nIndice\n\nCasi d'uso\n- 1 Casi d'uso 1.1 Materiali di reimpiego 1.2 Sito pluristratificato 1.3 Diversi rinvenimenti fanno una necropoli (o un insediamento) 1.4 Rappresentare elementi molto piccoli 1.5 Inserire MOSI esterni all'area del MOPR..."
+  },
+  {
+    "question": "Qual è il comando necessario per validare la mappa prima di procedere alla georeferenziazione in QGIS?",
+    "relevant_docs": [
+      "3a160c38da2d4838c52f1691efa9cfb70c46954bfe0fab27ebd3078504dea5ea"
+    ],
+    "document_content": "Brevi note su QGIS\nIndice | Istruzioni HTML | Istruzioni HTML\n\nBrevi note su QGIS\n! NB: solo dopo aver validato la mappa con il comando !! si procede alla georeferenziazione con la creazione di un raster georiferito nella cartella scelta, producendo così un file stabile, mentre il raster importato nella fase di lavorazione può essere “instabile” (sul modello dei file temporanei) e quindi suscettibile di perdita di dati in caso di spegnimento involontario di QGIS o di cambio di spostamento del progetto dalla cartel..."
+  },
+  {
+    "question": "Qual è la simbologia ed etichettatura utilizzata in QGIS?",
+    "relevant_docs": [
+      "e29247088395f4cee5349d76f97b05a71fdc3e1708a28f8934e1a8a77e9a8721"
+    ],
+    "document_content": "Brevi note su QGIS\nIndice | Simbologia ed etichettatura\n\nBrevi note su QGIS\nDi\n\nTo)\n\n7,\n\nvosconsee\n\n-\n\nDVouolazaioneLeyes\n\n..."
+  },
+  {
+    "question": "Qual è la differenza tra il valore e l'etichetta associata in un vocabolario numerico?",
+    "relevant_docs": [
+      "7e4cb483ef11ee8b9f488bd2eff5a732fb32d5e0851c9076405ee6b2bbc306b7"
+    ],
+    "document_content": "Vocabolario NVCT\n\n\nVocabolario NVCT\nNella struttura del progetto tutti i vocabolari sono numerici, registrati come tali e possono seguire un ordine apparentemente casuale dovuto all'aggiunta di termini nel tempo. Il valore è l'etichetta associata. Nella struttura del progetto tutti i vocabolari sono numerici, registrati come tali e possono seguire un ordine apparentemente casuale dovuto all'aggiunta di termini nel tempo. Il valore è l'etichetta associata...."
+  },
+  {
+    "question": "Come posso regolare l'opacità di un livello in QGIS?",
+    "relevant_docs": [
+      "51a9b316a7a7d6613bf417650fe6e0878fe22d8c8ef27d994c9f7fa2f3c76625"
+    ],
+    "document_content": "Brevi note su QGIS\nIndice | I servizi di mappa esterni (WMS/WFS) | I servizi di mappa esterni (WMS/WFS)\n\nBrevi note su QGIS\nPoi si può selezionare il pulsante legenda (l’icona con i tre quadratini sovrapposti) e aggiungere con la freccina al centro il cursore “opacità” al livello, da cui poi è possibile regolare la trasparenza (questa operazione è possibile con tutti i livelli non solo con i WMS). Poi si può selezionare il pulsante legenda (l’icona con i tre quadratini sovrapposti) e aggiungere con la freccina al ..."
+  },
+  {
+    "question": "Quale sistema di riferimento è stato scelto per il progetto?",
+    "relevant_docs": [
+      "ed901b690b08257c1dae6ef7f19246a1d5e832246dd02d72b6135cab3e770405"
+    ],
+    "document_content": "Il progetto\nPrima di cominciare | I sistemi di riferimento: alcune osservazioni e qualche errore da non fare | I sistemi di riferimento: alcune osservazioni e qualche errore da non fare\n\nIl progetto\nLa scelta del sistema di riferimento dei dati e del progetto fatta verso il Datum WGS84, sottintende che il caricamento all'interno del progetto Template di layer geografici (sia vettoriali sia raster) espressi in un qualsiasi sistema di riferimento basato su altro Datum (come ad esempio Roma40 o ED50 o ETRS89 o..."
+  },
+  {
+    "question": "Qual è l'ordine dei termini nel vocabolario OGM?",
+    "relevant_docs": [
+      "2efe233c5448d9359d2562614f11b046ed548af6dbf3e0062a146d5f26a8269a"
+    ],
+    "document_content": "Vocabolario OGM\n\n\nVocabolario OGM\nNella struttura del progetto tutti i vocabolari sono numerici, registrati come tali e possono seguire un ordine apparentemente casuale dovuto all'aggiunta di termini nel tempo. Il valore è l'etichetta associata. Nella struttura del progetto tutti i vocabolari sono numerici, registrati come tali e possono seguire un ordine apparentemente casuale dovuto all'aggiunta di termini nel tempo. Il valore è l'etichetta associata...."
+  },
+  {
+    "question": "Quali sono i casi d'uso specifici per l'inserimento di MOSI esterni all'area del MOPR?",
+    "relevant_docs": [
+      "39ddd38b6a0509b823cfed39b615903d2f110dceb35d52eae26aeea91f3ed972"
+    ],
+    "document_content": "Casi d'uso\nCasi d'uso | Inserire MOSI esterni all'area del MOPR | Inserire MOSI esterni all'area del MOPR\n\nCasi d'uso\nSi è trattato in particolare di tratti di selciato, visualizzati dagli operatori durante il viaggio verso le aree RCG, che sono stati rilevati e posizionati con GPS di precisione. Si è trattato in particolare di tratti di selciato, visualizzati dagli operatori durante il viaggio verso le aree RCG, che sono stati rilevati e posizionati con GPS di precisione. I dati non possono essere registr..."
+  },
+  {
+    "question": "Come si compila il MOPR nel Geoportale Nazionale Archeologia?",
+    "relevant_docs": [
+      "e468f3c09ae2990d22f0dd850d5e18d3f3ef29fa47bd0032c83e9305a9da05ab"
+    ],
+    "document_content": "Compilare il MOPR\nDati progetto | Inserire i dati nei layer collegati | Ricognizione | Ricognizione\n\nCompilare il MOPR\nIn tal caso è possibile modificare RCGH inserendo lo stesso codice presente in SIGECweb e contemporaneamente è obbligatorio sostituire anche RCGJ=GNA con RCGJ=codice dell’ente schedatore in SIGECweb. In tutti gli altri casi accettare i valori proposti dal sistema. Nel caso si decida di creare un Authority file RCG in SiGECweb dopo averlo creato in GNA, seguire questa procedura . Il layer, multipo..."
+  },
+  {
+    "question": "Quali sono i dati che devono essere inseriti nei layer collegati per compilare il MOPR?",
+    "relevant_docs": [
+      "2b7db47ba2a71ca574b438982f9ef2ba9f849388744f4ac59a908a4411b0efc6"
+    ],
+    "document_content": "Compilare il MOPR\nDati progetto | Inserire i dati nei layer collegati | Ricognizione | Ricognizione\n\nCompilare il MOPR\nI tab successivi permettono di accedere all’inserimento delle geometrie delle singole emergenze archeologiche (MOSI), della ricognizione (RCG), di scavo (DSC), del potenziale archeologico (VRP) e, in caso di documento di valutazione, delle aree sottoposte a valutazione del rischio (VRD) direttamente dalla scheda del progetto, in modo da imporre l’autocompilazione dei dati comuni. I tab successivi..."
+  },
+  {
+    "question": "Qual è il significato di \"Vocabolario OGM\" nel contesto del Geoportale Nazionale Archeologia?",
+    "relevant_docs": [
+      "a9f8a243fe44d2530686a08967c4442b17ee76a4bd657000f72458b2805230fc"
+    ],
+    "document_content": "Vocabolario OGM\n\n\nVocabolario OGM\nTorna indietro Torna indietro..."
+  },
+  {
+    "question": "Quali informazioni sono visibili nella pagina di inserimento dati quando si stampa il Catalogo dei siti?",
+    "relevant_docs": [
+      "15f0a925200ca4399cb04eaa355cc6a3ebff4182212496134675d7d6cfff95f3"
+    ],
+    "document_content": "Per stampare\nStampare i MOSI (Catalogo dei siti) | Stampare i MOSI (Catalogo dei siti)\n\nPer stampare\nSarà visibile tutto ciò che si vede nella pagina di inserimento dati. Nell’esempio proposto si può notare come nella mappa a grande scala compaia la cartografia catastale che è visibile solo fino alla scala 1:10.000 circa. Nella parte destra in alto sono raccolte le informazioni essenziali: localizzazione, definizione, cronologia, modalità di individuazione, distanza dall’opera in progetto e breve descrizione..."
+  },
+  {
+    "question": "Qual è l'ordine dei vocabolari nel progetto?",
+    "relevant_docs": [
+      "3af58b78ab0cf6975d37f9110a78e9b3ec21b682d4438789727594b2c804cea8"
+    ],
+    "document_content": "Vocabolario AMA\n\n\nVocabolario AMA\nNella struttura del progetto tutti i vocabolari sono numerici, registrati come tali e possono seguire un ordine apparentemente casuale dovuto all'aggiunta di termini nel tempo. Il valore è l'etichetta associata. Nella struttura del progetto tutti i vocabolari sono numerici, registrati come tali e possono seguire un ordine apparentemente casuale dovuto all'aggiunta di termini nel tempo. Il valore è l'etichetta associata...."
+  },
+  {
+    "question": "Quali sono le proprietà del progetto che devono essere settate per evitare errori nelle misurazioni?",
+    "relevant_docs": [
+      "9e6e21aba32bc0c87b24e2d155fe1b1a02c919a0e43de01dbd9995d43b58bced"
+    ],
+    "document_content": "Il progetto\nPrima di cominciare | I sistemi di riferimento: alcune osservazioni e qualche errore da non fare | I sistemi di riferimento: alcune osservazioni e qualche errore da non fare\n\nIl progetto\nPer evitare errori nelle misurazioni assicurarsi quindi che le proprietà del progetto siano settate nel modo seguente: \nProgetto > Proprietà > Generale > Misure: Ellissoide=WGS84 (EPSG:7030) e Mostra coordinate in uso=Unità mappa (metri) Per quanto riguarda il problema delle misurazioni e distanze, fortunatament..."
+  },
+  {
+    "question": "Quali sono le applicazioni specifiche menzionate nel testo?",
+    "relevant_docs": [
+      "fc42526122a649e4e3384d371cddc078552de8a9309bd7c77212441326aee2a7"
+    ],
+    "document_content": "Qualche applicazione specifica\nUtilizzo del Template per la redazione di una carta archeologica | Prima di inserire i dati nel Template\n\nQualche applicazione specifica\n- Georeferenziazione del catasto pontificio del 1818\n- Georeferenziazione (molto approssimata) della pianta del Bleau del 1663\n- Georeferenziazione del rilievo dello scavo di Piazza Avveduti del 1939\n- Pianta di G. Bartolucci del 1936\n- Principali vincoli nel centro storico di Fano\n- Rete dei sottoservizi..."
+  },
+  {
+    "question": "Quali sono le proprietà elencate nel vocabolario CDGG?",
+    "relevant_docs": [
+      "ce7ffa7035dce65d92eaae8c777fa236a30b638ff8c0bd0dbd43935890372d1f"
+    ],
+    "document_content": "Vocabolario CDGG\n\n\nVocabolario CDGG\n|   CDGG_chiave | CDGG_valore                                       |\n|--------------:|:--------------------------------------------------|\n|             2 | proprietà Stato                                   |\n|             3 | proprietà Ente pubblico territoriale              |\n|             4 | proprietà Ente pubblico non territoriale          |\n|             5 | proprietà privata                                 |\n|             6 | proprietà Ente religioso cattolico         ..."
+  },
+  {
+    "question": "Qual è la differenza tra il valore e l'etichetta associata in un vocabolario numerico?",
+    "relevant_docs": [
+      "996c45a88f9c1b09555b03c1160261c7d24d6e4a99de641fe76e43b4890ba316"
+    ],
+    "document_content": "Vocabolario DTR\n\n\nVocabolario DTR\nNella struttura del progetto tutti i vocabolari sono numerici, registrati come tali e possono seguire un ordine apparentemente casuale dovuto all'aggiunta di termini nel tempo. Il valore è l'etichetta associata. Nella struttura del progetto tutti i vocabolari sono numerici, registrati come tali e possono seguire un ordine apparentemente casuale dovuto all'aggiunta di termini nel tempo. Il valore è l'etichetta associata. Nel caso di giacimenti paleontologici riferibili a periodi..."
+  },
+  {
+    "question": "Quali sono le avvertenze da considerare per il progetto?",
+    "relevant_docs": [
+      "24dad1e46a6e3d2c3b7c7a90ebee7874073a0a533c25106fd02c802a146a1f07"
+    ],
+    "document_content": "Il progetto\nAlcune avvertenze | Livello di dettaglio | Livello di dettaglio\n\nIl progetto\nSolo in questo modo sarà possibile mantenere l’uniformità del sistema a livello nazionale e garantire la correttezza necessaria per predisporre la pubblicazione dei dati sul GNA e l’interoperabilità con ICCD e con le altre piattaforme MiC, centrali o locali. NB : Sono ovviamente possibili e del tutto autonome e libere l’aggiunta di layer raster e vettoriali, il collegamento a WMS/WFS, e la modifica delle simbologie del ..."
+  },
+  {
+    "question": "Qual è la pagina principale del Geoportale Nazionale Archeologia (GNA)?",
+    "relevant_docs": [
+      "a1e604c765833d3a9b894fc8ff4a7faadb4d2446cab401d7147cfc9b9e3163a0"
+    ],
+    "document_content": "Pagina principale\n\n\nPagina principale\nALT_TEXT: Logo..."
+  },
+  {
+    "question": "Come si stampa il MOPR?",
+    "relevant_docs": [
+      "8b6976db5f6d72ac5bd5e33e9def3b0b66192dddcade1009717ad6a3982f4e92"
+    ],
+    "document_content": "Per stampare\nStampare il MOPR\n\nPer stampare\nALT_TEXT: Stampa MOPR 03.jpg..."
+  },
+  {
+    "question": "Quali sono i casi d'uso del Geoportale Nazionale Archeologia per la gestione dei rinvenimenti in una necropoli o in un insediamento?",
+    "relevant_docs": [
+      "db6e46ba925a17a3ab90a02ba9b091fbdb44dbeaaa02046976e834ad6ab25d9c"
+    ],
+    "document_content": "Casi d'uso\nCasi d'uso | Diversi rinvenimenti fanno una necropoli (o un insediamento) | Diversi rinvenimenti fanno una necropoli (o un insediamento)\n\nCasi d'uso\nCon questa struttura è possibile salvaguardare da un lato la raccolta dei dati e dall’altro l’informazione che in quella piazza la stratificazione archeologica è stata interamente bonificata (pur con i distinguo che abbiamo già detto). Naturalmente questa struttura può essere utilizzata in maniera modulare, prevedendo una compilazione di MOSI in fas..."
+  },
+  {
+    "question": "Come si compila il MOPR nel Geoportale Nazionale Archeologia?",
+    "relevant_docs": [
+      "866a3b3d286ee594d270eeb2498c80907a76a14b020ea70065b795b061245828"
+    ],
+    "document_content": "Compilare il MOPR\nDati progetto | Caricare i MOSI da GNA. L'uso del plugin | Caricare i MOSI da GNA. L'uso del plugin\n\nCompilare il MOPR\n4. Nella finestra \"Dettagli repository\" inserire le seguenti informazioni e fare clic su OK: 4.1 Nome: Repository GNA 4.2 URL: https://gna.cultura.gov.it/qgis/plugins/plugins.xml..."
+  },
+  {
+    "question": "Qual è il modo per caricare i MOSI da GNA utilizzando il plugin?",
+    "relevant_docs": [
+      "b6a14b640955242c2ab6d530bae966dc82e4dded13288f0ef1df8385ecd8c8e8"
+    ],
+    "document_content": "Compilare il MOPR\nDati progetto | Caricare i MOSI da GNA. L'uso del plugin | Caricare i MOSI da GNA. L'uso del plugin\n\nCompilare il MOPR\nTorna su Torna su Francesco Marucci Francesco Marucci Sul repository di plugin per QGIS del GNA è disponibile il \"Plugin GNA\" che permette di dialogare con il Geoportale per caricare direttamente in QGIS i dati GNA relativi ad un determinato Modulo di Progetto (MOPR) ed in futuro di consegnare nel GNA il Modulo di Progetto, in modo che venga rapidamente messo a disposizione di t..."
+  },
+  {
+    "question": "Quali sono i requisiti per la trasformazione polinomiale in QGIS?",
+    "relevant_docs": [
+      "c26e6dc2ae56f045db544f6331b20b74d9edbfb5a3bf15ae5537ad6a847afa68"
+    ],
+    "document_content": "Brevi note su QGIS\nIndice | Lavorare con i raster | Lavorare con i raster\n\nBrevi note su QGIS\nDalla Mappa QGIS farà momentaneamente sparire la maschera con il raster da georeferenziare e vi porterà sulla mappa di base sulla quale dovrete aver preventivamente individuato il punto di aggancio. Terminare l’operazione cliccando OK e ripeterla per inserire almeno 3 punti non allineati tra loro nel caso della trasformazione Polinomiale 1 o 6 punti non allineati tra loro nel caso della trasformazione Polinomiale di secon..."
+  }
+]

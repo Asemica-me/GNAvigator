@@ -9,6 +9,7 @@ import re
 import gc
 import time
 import weakref
+from transformers import AutoTokenizer
 from vector_store import *
 
 load_dotenv()
@@ -124,6 +125,8 @@ class MistralLLM:
     ) -> str:
         """Generate answer with RAG context using async streaming"""
         async with self.semaphore:
+            messages = None
+            stream = None
             try:
                 messages = self._build_rag_prompt(question, context, chat_history)
                 stream = await self.client.chat.stream_async(
@@ -149,7 +152,10 @@ class MistralLLM:
                 raise
             finally:
                 # Clean up intermediate resources
-                del messages, stream
+                if messages is not None:
+                    del messages
+                if stream is not None:
+                    del stream
                 gc.collect()
 
     def _validate_citations(self, response: str, context_size: int) -> str:
@@ -174,6 +180,7 @@ class RAGOrchestrator:
         self._llm = None
         self.last_cleanup = time.time()
         self.query_count = 0
+        self.tokenizer = self._initialize_tokenizer()
 
     @property
     def vector_db(self):
@@ -294,3 +301,43 @@ class RAGOrchestrator:
         finally:
             # Clean up after initialization
             self.clear_cache(full=False)
+
+    async def sample_documents(self, n: int) -> list:
+        """Sample documents from the vector store"""
+        return await asyncio.get_event_loop().run_in_executor(
+            None, 
+            self.vector_db.sample_documents, 
+            n
+        )
+
+    async def get_documents_by_ids(self, doc_ids: list) -> list:
+        """Retrieve documents by their IDs"""
+        return await asyncio.get_event_loop().run_in_executor(
+            None, 
+            self.vector_db.get_documents_by_ids, 
+            doc_ids
+        )
+    
+    def _initialize_tokenizer(self):
+        """Initialize tokenizer for approximate token counting"""
+        try:
+            from transformers import AutoTokenizer
+            return AutoTokenizer.from_pretrained(os.getenv("EMBEDDING_MODEL"))
+        except ImportError:
+            # Fallback to simple whitespace tokenizer
+            return lambda text: text.split()
+    
+    async def retrieve_docs(self, question: str, top_k: int = 5) -> list:
+        """Retrieve documents without generating full response"""
+        # Run synchronous vector store query in executor
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, 
+            self.vector_db.query, 
+            question, 
+            top_k
+        )
+    
+    def tokenize(self, text: str) -> list:
+        """Tokenize text for approximate token counting"""
+        return self.tokenizer(text) if callable(self.tokenizer) else text.split()
