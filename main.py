@@ -11,7 +11,7 @@ import re
 import concurrent.futures
 from feedback_handling import init_db, git_sync, save_feedback, export_feedbacks, FEEDBACK_DB
 init_db()
-from llm_handler import *
+from rag_sys import *
 
 # --- Critical Dependencies Setup ---
 # Create directories first (runs once per session)
@@ -147,7 +147,7 @@ def main():
         if not MISTRAL_API_KEY:
             st.error("MISTRAL_API_KEY mancante!")
             st.stop()
-        from llm_handler import RAGOrchestrator
+        from rag_sys import RAGOrchestrator
         return RAGOrchestrator(mistral_api_key=MISTRAL_API_KEY)
     
     

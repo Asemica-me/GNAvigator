@@ -2,7 +2,7 @@ import os
 import json
 import asyncio
 from dotenv import load_dotenv
-from llm_handler import *
+from rag_sys import *
 
 load_dotenv()
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
@@ -16,9 +16,15 @@ async def generate_test_data(output_file=None, num_questions=50):
     
     # Get sample documents
     sample_docs = await orchestrator.sample_documents(num_questions)
+
+    # Filter out image chunks
+    filtered_docs = [
+        doc for doc in sample_docs
+        if doc["metadata"].get("content_type", "") not in ["image_ocr", "image"]][:num_questions]  # take only the first N after filtering
+
     
     test_data = []
-    for doc in sample_docs:
+    for doc in filtered_docs:
         question = await generate_question_for_doc(orchestrator, doc)
         test_data.append({
             "question": question,
@@ -37,7 +43,7 @@ async def generate_question_for_doc(orchestrator, document):
     """Use LLM to generate question from document content"""
     prompt = f"""
     [INST] 
-    Genera una domanda specifica a cui il seguente testo risponde. 
+    Genera una domanda a cui il seguente testo risponde. 
     La domanda deve essere in italiano e deve riguardare esclusivamente le informazioni presenti nel testo.
     
     Testo:

@@ -14,7 +14,7 @@ from keybert import KeyBERT
 import nltk
 from nltk.corpus import stopwords
 from tqdm.asyncio import tqdm
-from ocr_tesseract import *
+from OCR.ocr_tesseract import *
 
 # --- Configuration ---
 load_dotenv()

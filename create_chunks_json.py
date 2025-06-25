@@ -15,7 +15,7 @@ nltk.download('punkt', quiet=True)
 from nltk.corpus import stopwords
 from tqdm.asyncio import tqdm
 import time
-from ocr_tesseract import *
+from OCR.ocr_tesseract import *
 
 # --- Configuration ---
 load_dotenv()
@@ -24,8 +24,9 @@ BASE_DOMAIN = 'https://gna.cultura.gov.it'
 OUTPUT_FOLDER = "data"
 OUTPUT_FILENAME = "chunks_memory.json"
 OUTPUT_PATH = os.path.join(OUTPUT_FOLDER, OUTPUT_FILENAME)
-CHUNK_SIZE = 1024
-CHUNK_OVERLAP = 256
+CHUNK_SIZE = 512 # Max characters per chunk #Reduced size is better for dense retrieval
+CHUNK_OVERLAP = 128
+MIN_CHUNK_LENGTH = 64  # Characters
 MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds
 CONCURRENCY_LIMIT = 3  # Max concurrent requests
@@ -54,17 +55,24 @@ def generate_chunk_id(source: str, chunk_index: int) -> str:
 def extract_keywords_and_entities(text: str):
     """Extracts keywords and entities from text using KeyBERT and spaCy."""
     doc = nlp(text)
+    
+    # Extract noun phrases
+    noun_phrases = [chunk.text for chunk in doc.noun_chunks]
+    
+    # Extract entities
     entities = list(set([(ent.text, ent.label_) for ent in doc.ents]))
+    
+    # Combine with KeyBERT
+    combined_text = " ".join(noun_phrases + [text])
     keywords = kw_model.extract_keywords(
-        text,
+        combined_text,  # Focus on noun phrases
         keyphrase_ngram_range=(1, 2),
         stop_words=italian_stopwords,
-        top_n=10,
+        top_n=7,  # Reduced from 10
         use_mmr=True,
-        diversity=0.5,
+        diversity=0.7 
     )
-    keyword_list = [kw[0] for kw in keywords] if keywords else []
-    return keyword_list, entities
+    return [kw[0] for kw in keywords], entities
 
 def save_chunks_to_json(chunks: list, output_path: str):
     """Saves the list of chunks to a JSON file"""
@@ -110,6 +118,11 @@ async def fetch_page_content(client: httpx.AsyncClient, url: str) -> BeautifulSo
 
 def extract_structured_content(soup: BeautifulSoup, base_domain: str):
     """Extracts content with structural context in document order"""
+    CONTENT_BLACKLIST = ["navigation", "footer", "sidebar", "menu"]
+    
+    for element in soup.find_all(class_=CONTENT_BLACKLIST):
+        element.decompose()
+    
     content_div = soup.find('div', {'id': 'mw-content-text'})
     if not content_div:
         return []
@@ -124,24 +137,27 @@ def extract_structured_content(soup: BeautifulSoup, base_domain: str):
             return
             
         # Handle headers
-        if elem.name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
-            level = int(elem.name[1])
-            header_text = elem.get_text(strip=True, separator=' ')
-            if header_text:
-                # Update header tracking
-                current_headers[level-1] = header_text
-                # Reset lower-level headers
-                for i in range(level, 6):
-                    current_headers[i] = ""
-                    
-                structured_content.append({
-                    'type': 'header',
-                    'level': level,
-                    'content': header_text,
-                    'context': [h for h in current_headers[:level] if h]
-                })
-                # Skip processing children of headers to avoid duplication
-                return
+        if elem.name and elem.name.startswith('h') and len(elem.name) == 2:
+            try:
+                level = int(elem.name[1])
+                header_text = elem.get_text(strip=True, separator=' ')
+                if header_text:
+                    # Update header tracking
+                    if current_headers[level-1] != header_text:
+                            # Update header tracking
+                            current_headers[level-1] = header_text
+                            # Reset lower-level headers
+                            for i in range(level, 6):
+                                current_headers[i] = ""
+                        
+                    structured_content.append({
+                        'type': 'header',
+                        'level': level,
+                        'content': header_text,
+                        'context': [h for h in current_headers[:level] if h]
+                    })
+            except ValueError:
+                pass
                 
         # Handle paragraphs
         elif elem.name == 'p':
@@ -244,15 +260,34 @@ def create_semantic_chunks(page_data: dict) -> list:
     char_count = 0
     chunk_index = 0
 
+    # Track last header to prevent duplicates
+    last_header_content = None
+
     def create_chunk(content: str, context: list, content_type: str = "text"):
         nonlocal chunk_index
+        # Prepend header context to content
+        context_str = " | ".join(context) if context else ""
+        full_content = f"[{context_str}] {content}" if context_str else content
+        
+        # Add minimum length check
+        if len(full_content.strip()) < MIN_CHUNK_LENGTH:
+            return None
+        
+        # Deduplicate context headers
+        context_headers = []
+        seen_headers = set()
+        for header in context:
+            if header not in seen_headers:
+                context_headers.append(header)
+                seen_headers.add(header)
+
         keywords, entities = extract_keywords_and_entities(content)
         return {
             'chunk_id': generate_chunk_id(url, chunk_index),
             'source': url,
             'content_type': content_type,
             'title': title,
-            'headers_context': context,
+            'headers_context': context_headers,
             'keywords': keywords,
             'entities': entities,
             'content': content,
@@ -266,9 +301,11 @@ def create_semantic_chunks(page_data: dict) -> list:
 
         # Handle headers (update context but don't create chunks)
         if item_type == 'header':
-            # Only update context if it's a new header
-            if not current_context or content != current_context[-1]:
-                current_context = context + [content]
+            # Only update if different from last header
+            if content != last_header_content:
+                # Use the context from the header item (which already includes hierarchy)
+                current_context = context
+                last_header_content = content
             continue
 
         # Handle tables as separate chunks

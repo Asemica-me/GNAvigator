@@ -1,10 +1,11 @@
-import asyncio
 import os
+import asyncio
 import pickle
 import numpy as np
 import faiss
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
+from transformers import pipeline
 from create_chunks_json import crawl_and_chunk, SITEMAP_PATH, BASE_DOMAIN
 import torch
 import gc
@@ -13,6 +14,7 @@ import time
 import json
 from tqdm import tqdm
 import random 
+import contextlib
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -43,6 +45,7 @@ class VectorDatabaseManager:
         self.query_count = 0
         self.last_cleanup = time.time()
         self._cached_embeddings = {}
+        self.device = torch.device("cpu")
         
         # Load existing database if available
         if os.path.exists(FAISS_INDEX_PATH) and os.path.exists(METADATA_PATH):
@@ -65,37 +68,8 @@ class VectorDatabaseManager:
     @property
     def embedding_model(self):
         if self._embedding_model is None:
-            # Check if we have cached embeddings
-            if os.path.exists(EMBEDDINGS_CACHE_PATH):
-                logger.info("Found precomputed embeddings cache")
-                return None
-                
-            # Device selection with memory awareness
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                total_mem = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
-                free_mem = torch.cuda.mem_get_info()[0] / (1024 ** 3)
-                
-                if free_mem < 2 or total_mem < 8:  # Less than 2GB free or small GPU
-                    logger.warning(f"Low GPU memory ({free_mem:.1f}GB free of {total_mem:.1f}GB), using CPU")
-                    device = 'cpu'
-                else:
-                    device = 'cuda'
-                    logger.info(f"Using GPU with {free_mem:.1f}GB free memory")
-            else:
-                device = 'cpu'
-                logger.info("Using CPU for embeddings")
-            
-            # Only load model if we need to compute embeddings
-            self._embedding_model = SentenceTransformer(EMBEDDING_MODEL, device=device)
+            self._embedding_model = SentenceTransformer(EMBEDDING_MODEL) 
             self._embedding_model.eval()
-            
-            if device == 'cuda':
-                try:
-                    self._embedding_model.half()
-                    logger.info("Using half-precision model for GPU efficiency")
-                except Exception:
-                    logger.warning("Couldn't convert to half precision, using full precision")
         
         return self._embedding_model
 
@@ -130,6 +104,8 @@ class VectorDatabaseManager:
             # Prepare data for storage
             ids, documents, metadatas = [], [], []
             for chunk in chunks:
+                if chunk is None:
+                    continue  # Skip null entries
                 chunk_id, text_content, metadata = self._format_chunk(chunk)
                 ids.append(chunk_id)
                 documents.append(text_content)
@@ -186,17 +162,9 @@ class VectorDatabaseManager:
 
     def _generate_embeddings(self, documents: list) -> np.ndarray:
         """Embedding generation with batching and memory management"""
-        # Determine optimal batch size based on hardware
-        if torch.cuda.is_available():
-            batch_size = 128  # Larger batches for GPU
-            precision = torch.float16
-            logger.info("Using GPU-optimized embedding generation")
-        else:
-            # Optimize for CPU with parallel processing
-            batch_size = 64
-            precision = torch.float32
-            torch.set_num_threads(os.cpu_count() or 4)
-            logger.info(f"Using CPU with {torch.get_num_threads()} threads")
+        # Device is always CPU on Streamlit cloud
+        batch_size = 32
+        logger.info(f"Generating embeddings on {self.device} with batch size {batch_size}")
         
         all_embeddings = []
         total_batches = (len(documents) + batch_size - 1) // batch_size
@@ -207,8 +175,8 @@ class VectorDatabaseManager:
         for i in range(0, len(documents), batch_size):
             batch = documents[i:i+batch_size]
             
-            # Generate embeddings with automatic mixed precision
-            with torch.no_grad(), torch.cuda.amp.autocast(enabled=(precision==torch.float16)):
+            # Generate embeddings without autocast
+            with torch.no_grad():
                 batch_embeddings = self._embedding_model.encode(
                     batch,
                     convert_to_numpy=True,
@@ -237,6 +205,7 @@ class VectorDatabaseManager:
             logger.error(f"Error saving database: {str(e)}")
 
     def query(self, question: str, top_k: int = 5) -> list:
+        """Query the vector store with a question and return top_k results"""
         try:
             # Query management
             self.query_count += 1
@@ -244,22 +213,21 @@ class VectorDatabaseManager:
                 self.clear_cache()
                 self.query_count = 0
             
-            # Use cached embeddings if available
-            if question in self._cached_embeddings:
-                query_embedding = self._cached_embeddings[question]
+            # Generate embedding using main model
+            model = self.embedding_model
+            if model:
+                with torch.no_grad():
+                    query_embedding = model.encode(
+                        [question], 
+                        convert_to_numpy=True,
+                        normalize_embeddings=True
+                    )
             else:
-                # Use a smaller model for query encoding if available
-                if self._embedding_model:
-                    with torch.no_grad():
-                        query_embedding = self._embedding_model.encode(
-                            [question], 
-                            convert_to_numpy=True,
-                            normalize_embeddings=True
-                        )
-                else:
-                    # Fallback to querying with a smaller model
-                    query_model = SentenceTransformer(os.getenv("EMBEDDING_MODEL"))
-                    query_embedding = query_model.encode([question], convert_to_numpy=True)
+                fallback_model = SentenceTransformer(EMBEDDING_MODEL)
+                query_embedding = fallback_model.encode(
+                    [question], 
+                    convert_to_numpy=True
+                )
                 
                 if len(self._cached_embeddings) < MAX_CACHE_SIZE:
                     self._cached_embeddings[question] = query_embedding
@@ -300,25 +268,38 @@ class VectorDatabaseManager:
         finally:
             self._clear_memory()
 
+    # query_expander = pipeline("text2text-generation", model="google/mt5-large")
+
+    # def expand_query(self, query: str):
+    #     # Lazy load the query expander
+    #     if not hasattr(self, '_query_expander'):
+    #         self._query_expander = pipeline(
+    #             "text2text-generation", 
+    #             model="google/mt5-base",  # Smaller model
+    #             device=-1  # Force CPU
+    #         )
+    #     return self._query_expander(
+    #         f"expand query: {query}",
+    #         max_length=64,
+    #         num_return_sequences=1,
+    #         do_sample=True
+    #     )[0]['generated_text']
+
     def clear_cache(self, full: bool = False):
         logger.info("Clearing vector store cache")
-        
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        
         self._cached_embeddings.clear()
         
         if full and self._embedding_model:
             try:
-                self._embedding_model = self._embedding_model.to('cpu')
+                del self._embedding_model
+                self._embedding_model = None
+                logger.info("Unloaded embedding model")
             except Exception as e:
-                logger.warning(f"Error moving model to CPU: {str(e)}")
+                logger.warning(f"Error deleting embedding model: {str(e)}")
         
-        gc.collect()
+        self._clear_memory()
 
     def _clear_memory(self):
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
         gc.collect()
 
     def sample_documents(self, n: int) -> list:
@@ -373,20 +354,20 @@ async def main():
     db_manager = VectorDatabaseManager()
     await db_manager.process_and_store_chunks()
 
-    # Example query
-    results = db_manager.query(
-        "Quali sono le differenze tra OGD e OGT?",
-        top_k=3
-    )
+    # # Example query
+    # results = db_manager.query(
+    #     "Quali sono le differenze tra OGD e OGT?",
+    #     top_k=3
+    # )
 
-    print("\nTop results:")
-    for i, result in enumerate(results, 1):
-        print(f"\n--- RESULT {i} ---")
-        print(f"Title: {result.get('title')}")
-        print(f"Source: {result.get('source')}")
-        print(f"Content type: {result.get('content_type')}")
-        print(f"Relevance: {result.get('score'):.2%}")
-        print(f"Content preview:\n{result.get('content')}")
+    # print("\nTop results:")
+    # for i, result in enumerate(results, 1):
+    #     print(f"\n--- RESULT {i} ---")
+    #     print(f"Title: {result.get('title')}")
+    #     print(f"Source: {result.get('source')}")
+    #     print(f"Content type: {result.get('content_type')}")
+    #     print(f"Relevance: {result.get('score'):.2%}")
+    #     print(f"Content preview:\n{result.get('content')}")
 
 if __name__ == "__main__":
     asyncio.run(main())
