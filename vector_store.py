@@ -1,20 +1,20 @@
-import os
 import asyncio
+import gc
+import json
+import logging
+import os
 import pickle
-import numpy as np
+import random
+import time
+
 import faiss
+import numpy as np
+import torch
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
-from transformers import pipeline
-from create_chunks_json import crawl_and_chunk, SITEMAP_PATH, BASE_DOMAIN
-import torch
-import gc
-import logging
-import time
-import json
 from tqdm import tqdm
-import random 
-import contextlib
+
+from create_chunks_json import BASE_DOMAIN, SITEMAP_PATH, crawl_and_chunk
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -37,21 +37,25 @@ MAX_CACHE_SIZE = 1000
 CLEANUP_INTERVAL = 10
 GPU_CACHE_THRESHOLD = 80
 
+
 class VectorDatabaseManager:
-    def __init__(self):
+    def __init__(self, device: str = None):
         self._embedding_model = None
         self.index = None
         self.metadata_db = []
         self.query_count = 0
         self.last_cleanup = time.time()
         self._cached_embeddings = {}
-        self.device = torch.device("cpu")
-        
+        if device is not None:
+            self.device = device
+        else:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
         # Load existing database if available
         if os.path.exists(FAISS_INDEX_PATH) and os.path.exists(METADATA_PATH):
             try:
                 self.index = faiss.read_index(FAISS_INDEX_PATH)
-                with open(METADATA_PATH, 'rb') as f:
+                with open(METADATA_PATH, "rb") as f:
                     self.metadata_db = pickle.load(f)
                 logger.info("Loaded existing FAISS database")
             except Exception as e:
@@ -68,15 +72,19 @@ class VectorDatabaseManager:
     @property
     def embedding_model(self):
         if self._embedding_model is None:
-            self._embedding_model = SentenceTransformer(EMBEDDING_MODEL) 
-            self._embedding_model.eval()
-        
+            self._embedding_model = SentenceTransformer(
+                EMBEDDING_MODEL,
+                device=self.device,
+            )
+
         return self._embedding_model
 
     def _format_chunk(self, chunk: dict) -> tuple:
         context_str = " | ".join(chunk.get("headers_context", []))
-        text_content = f"{context_str}\n\n{chunk.get('title', '')}\n{chunk.get('content', '')}"
-        
+        text_content = (
+            f"{context_str}\n\n{chunk.get('title', '')}\n{chunk.get('content', '')}"
+        )
+
         metadata = {
             "source": chunk.get("source", ""),
             "content_type": chunk.get("content_type", "text"),
@@ -84,7 +92,7 @@ class VectorDatabaseManager:
             "headers_context": chunk.get("headers_context", []),
             "keywords": chunk.get("keywords", []),
             "entities": chunk.get("entities", []),
-            "chunk_index": chunk.get("chunk_index", 0)
+            "chunk_index": chunk.get("chunk_index", 0),
         }
 
         return chunk["chunk_id"], text_content, metadata
@@ -93,14 +101,14 @@ class VectorDatabaseManager:
         try:
             # Load chunks from JSON
             if os.path.exists(CHUNK_JSON_PATH):
-                with open(CHUNK_JSON_PATH, 'r', encoding='utf-8') as f:
+                with open(CHUNK_JSON_PATH, "r", encoding="utf-8") as f:
                     chunks = json.load(f)
                 logger.info(f"Loaded {len(chunks)} chunks from {CHUNK_JSON_PATH}")
             else:
                 logger.info("No chunk JSON found, generating chunks...")
                 chunks = await crawl_and_chunk(SITEMAP_PATH, BASE_DOMAIN)
                 logger.info(f"Generated {len(chunks)} chunks")
-            
+
             # Prepare data for storage
             ids, documents, metadatas = [], [], []
             for chunk in chunks:
@@ -110,7 +118,7 @@ class VectorDatabaseManager:
                 ids.append(chunk_id)
                 documents.append(text_content)
                 metadatas.append(metadata)
-            
+
             # Check for embeddings cache
             if os.path.exists(EMBEDDINGS_CACHE_PATH):
                 logger.info("Loading embeddings from cache")
@@ -126,34 +134,35 @@ class VectorDatabaseManager:
                 else:
                     logger.error("No embedding model available and no cache found")
                     return
-            
+
             # Create or update FAISS index
+            self.index = None
+            self.metadata_db = []
+
             if self.index is None:
                 dimension = embeddings.shape[1]
                 self.index = faiss.IndexFlatIP(dimension)
                 self.index.add(embeddings)
                 self.metadata_db = [
-                    {"id": i, "document": doc, "metadata": meta} 
+                    {"id": i, "document": doc, "metadata": meta}
                     for i, doc, meta in zip(ids, documents, metadatas)
                 ]
                 logger.info(f"Created new FAISS index with {len(ids)} vectors")
             else:
                 self.index.add(embeddings)
                 for i, doc, meta in zip(ids, documents, metadatas):
-                    self.metadata_db.append({
-                        "id": i, 
-                        "document": doc, 
-                        "metadata": meta
-                    })
+                    self.metadata_db.append(
+                        {"id": i, "document": doc, "metadata": meta}
+                    )
                 logger.info(f"Added {len(ids)} new vectors to existing index")
-            
+
             # Persist to disk
             self._save_to_disk()
-            
+
             # Clean up
             del embeddings, chunks
             self._clear_memory()
-            
+
         except Exception as e:
             logger.error(f"Processing failed: {str(e)}")
             raise
@@ -164,41 +173,42 @@ class VectorDatabaseManager:
         """Embedding generation with batching and memory management"""
         # Device is always CPU on Streamlit cloud
         batch_size = 32
-        logger.info(f"Generating embeddings on {self.device} with batch size {batch_size}")
-        
+        logger.info(
+            f"Generating embeddings on {self.device} with batch size {batch_size}"
+        )
+
         all_embeddings = []
-        total_batches = (len(documents) + batch_size - 1) // batch_size
-        
+        # total_batches = (len(documents) + batch_size - 1) // batch_size
+
         # Use progress bar for visibility
         pbar = tqdm(total=len(documents), desc="Generating embeddings", unit="doc")
-        
+
         for i in range(0, len(documents), batch_size):
-            batch = documents[i:i+batch_size]
-            
+            batch = documents[i : i + batch_size]
+
             # Generate embeddings without autocast
-            with torch.no_grad():
-                batch_embeddings = self._embedding_model.encode(
-                    batch,
-                    convert_to_numpy=True,
-                    normalize_embeddings=True,
-                    batch_size=batch_size,
-                    show_progress_bar=False
-                )
-            
-            all_embeddings.append(batch_embeddings)
+            batch_embeddings = self.embedding_model.encode(
+                batch,
+                convert_to_numpy=True,
+                normalize_embeddings=True,
+                batch_size=batch_size,
+                show_progress_bar=False,
+            )
+
+            all_embeddings.extend(batch_embeddings)
             pbar.update(len(batch))
-            
+
             # Memory management
             if i > 0 and i % (10 * batch_size) == 0:
                 self._clear_memory()
-        
+
         pbar.close()
-        return np.vstack(all_embeddings)
+        return np.array(all_embeddings)
 
     def _save_to_disk(self):
         try:
             faiss.write_index(self.index, FAISS_INDEX_PATH)
-            with open(METADATA_PATH, 'wb') as f:
+            with open(METADATA_PATH, "wb") as f:
                 pickle.dump(self.metadata_db, f, protocol=pickle.HIGHEST_PROTOCOL)
             logger.info(f"Database saved to {FAISS_DIR}")
         except Exception as e:
@@ -212,29 +222,18 @@ class VectorDatabaseManager:
             if self.query_count >= CLEANUP_INTERVAL:
                 self.clear_cache()
                 self.query_count = 0
-            
+
             # Generate embedding using main model
-            model = self.embedding_model
-            if model:
-                with torch.no_grad():
-                    query_embedding = model.encode(
-                        [question], 
-                        convert_to_numpy=True,
-                        normalize_embeddings=True
-                    )
-            else:
-                fallback_model = SentenceTransformer(EMBEDDING_MODEL)
-                query_embedding = fallback_model.encode(
-                    [question], 
-                    convert_to_numpy=True
-                )
-                
-                if len(self._cached_embeddings) < MAX_CACHE_SIZE:
-                    self._cached_embeddings[question] = query_embedding
-            
+            query_embedding = self.embedding_model.encode(
+                [question], convert_to_numpy=True, normalize_embeddings=True
+            )
+
+            if len(self._cached_embeddings) < MAX_CACHE_SIZE:
+                self._cached_embeddings[question] = query_embedding
+
             # Search FAISS index
             scores, indices = self.index.search(query_embedding, top_k)
-            
+
             # Format results
             results = []
             for i, score in zip(indices[0], scores[0]):
@@ -242,26 +241,93 @@ class VectorDatabaseManager:
                     continue
                 try:
                     item = self.metadata_db[i]
-                    context_str = " → ".join(item["metadata"].get("headers_context", []))
-                    content_preview = (
-                        f"[Context: {context_str}]\n"
-                        f"{item['document'][:500]}..."
+                    context_str = " → ".join(
+                        item["metadata"].get("headers_context", [])
                     )
-                    
-                    results.append({
-                        "score": float(score),
-                        "id": self.metadata_db[i]["id"],
-                        "title": item["metadata"].get("title", ""),
-                        "source": item["metadata"].get("source", ""),
-                        "content_type": item["metadata"].get("content_type", "text"),
-                        "content": content_preview,
-                        "full_metadata": item["metadata"]
-                    })
+                    content_preview = (
+                        f"[Context: {context_str}]\n{item['document'][:500]}..."
+                    )
+
+                    results.append(
+                        {
+                            "score": float(score),
+                            "id": self.metadata_db[i]["id"],
+                            "title": item["metadata"].get("title", ""),
+                            "source": item["metadata"].get("source", ""),
+                            "content_type": item["metadata"].get(
+                                "content_type", "text"
+                            ),
+                            "content": content_preview,
+                            "full_metadata": item["metadata"],
+                        }
+                    )
                 except IndexError:
                     logger.warning(f"Invalid index {i} in metadata database")
-            
+
             return results
-            
+
+        except Exception as e:
+            logger.error(f"Query failed: {str(e)}")
+            return []
+        finally:
+            self._clear_memory()
+
+    def query_batch(self, questions: list[str], top_k: int = 5) -> list:
+        """Query the vector store with a question and return top_k results"""
+        try:
+            # Query management
+            self.query_count += len(questions)
+            if self.query_count >= CLEANUP_INTERVAL:
+                self.clear_cache()
+                self.query_count = 0
+
+            # Generate embedding using main model
+            query_embeddings = self.embedding_model.encode(
+                questions, convert_to_numpy=True, normalize_embeddings=True
+            )
+
+            if len(self._cached_embeddings) < MAX_CACHE_SIZE:
+                for question, embedding in zip(questions, query_embeddings):
+                    self._cached_embeddings[question] = embedding
+
+            # Search FAISS index
+            scores, indices = self.index.search(query_embeddings, top_k)
+
+            # Format results
+            results = []
+            for i_arr, score_arr in zip(indices, scores):
+                inner_results = []
+                for i, score in zip(i_arr, score_arr):
+                    if i < 0:
+                        continue
+                    try:
+                        item = self.metadata_db[i]
+                        context_str = " → ".join(
+                            item["metadata"].get("headers_context", [])
+                        )
+                        content_preview = (
+                            f"[Context: {context_str}]\n{item['document'][:500]}..."
+                        )
+
+                        inner_results.append(
+                            {
+                                "score": float(score),
+                                "id": self.metadata_db[i]["id"],
+                                "title": item["metadata"].get("title", ""),
+                                "source": item["metadata"].get("source", ""),
+                                "content_type": item["metadata"].get(
+                                    "content_type", "text"
+                                ),
+                                "content": content_preview,
+                                "full_metadata": item["metadata"],
+                            }
+                        )
+                    except IndexError:
+                        logger.warning(f"Invalid index {i} in metadata database")
+
+                results.append(inner_results)
+            return results
+
         except Exception as e:
             logger.error(f"Query failed: {str(e)}")
             return []
@@ -274,7 +340,7 @@ class VectorDatabaseManager:
     #     # Lazy load the query expander
     #     if not hasattr(self, '_query_expander'):
     #         self._query_expander = pipeline(
-    #             "text2text-generation", 
+    #             "text2text-generation",
     #             model="google/mt5-base",  # Smaller model
     #             device=-1  # Force CPU
     #         )
@@ -288,7 +354,7 @@ class VectorDatabaseManager:
     def clear_cache(self, full: bool = False):
         logger.info("Clearing vector store cache")
         self._cached_embeddings.clear()
-        
+
         if full and self._embedding_model:
             try:
                 del self._embedding_model
@@ -296,7 +362,7 @@ class VectorDatabaseManager:
                 logger.info("Unloaded embedding model")
             except Exception as e:
                 logger.warning(f"Error deleting embedding model: {str(e)}")
-        
+
         self._clear_memory()
 
     def _clear_memory(self):
@@ -307,24 +373,26 @@ class VectorDatabaseManager:
         if not self.metadata_db:
             logger.warning("No documents in database to sample")
             return []
-        
+
         # Ensure we don't request more than available
         n = min(n, len(self.metadata_db))
-        
+
         # Generate random indices without replacement
         sample_indices = random.sample(range(len(self.metadata_db)), n)
-        
+
         # Retrieve sampled documents
         samples = []
         for idx in sample_indices:
             item = self.metadata_db[idx]
-            samples.append({
-                "id": item["id"],
-                "document": item["document"],
-                "metadata": item["metadata"],
-                "content": item["metadata"].get("title", "") + "\n" + item["document"][:500] + "..."
-            })
-        
+            samples.append(
+                {
+                    "id": item["id"],
+                    "document": item["document"],
+                    "metadata": item["metadata"],
+                    "content": f"{item['metadata'].get('title', '')}\n{item['document'][:500]}...",
+                }
+            )
+
         logger.info(f"Sampled {n} documents from database")
         return samples
 
@@ -332,23 +400,26 @@ class VectorDatabaseManager:
         """Retrieve documents by their IDs"""
         if not self.metadata_db:
             return []
-        
+
         # Create lookup dictionary for faster access
         id_to_doc = {item["id"]: item for item in self.metadata_db}
-        
+
         results = []
         for doc_id in doc_ids:
             if doc_id in id_to_doc:
                 item = id_to_doc[doc_id]
-                results.append({
-                    "id": doc_id,
-                    "document": item["document"],
-                    "metadata": item["metadata"],
-                    "content": item["metadata"].get("title", "") + "\n" + item["document"][:500] + "..."
-                })
-        
+                results.append(
+                    {
+                        "id": doc_id,
+                        "document": item["document"],
+                        "metadata": item["metadata"],
+                        "content": f"{item['metadata'].get('title', '')}\n{item['document'][:500]}...",
+                    }
+                )
+
         logger.info(f"Retrieved {len(results)} documents by ID")
         return results
+
 
 async def main():
     db_manager = VectorDatabaseManager()
@@ -368,6 +439,7 @@ async def main():
     #     print(f"Content type: {result.get('content_type')}")
     #     print(f"Relevance: {result.get('score'):.2%}")
     #     print(f"Content preview:\n{result.get('content')}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
