@@ -39,14 +39,17 @@ GPU_CACHE_THRESHOLD = 80
 
 
 class VectorDatabaseManager:
-    def __init__(self):
+    def __init__(self, device: str = None):
         self._embedding_model = None
         self.index = None
         self.metadata_db = []
         self.query_count = 0
         self.last_cleanup = time.time()
         self._cached_embeddings = {}
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        if device is not None:
+            self.device = device
+        else:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         # Load existing database if available
         if os.path.exists(FAISS_INDEX_PATH) and os.path.exists(METADATA_PATH):
@@ -261,6 +264,68 @@ class VectorDatabaseManager:
                 except IndexError:
                     logger.warning(f"Invalid index {i} in metadata database")
 
+            return results
+
+        except Exception as e:
+            logger.error(f"Query failed: {str(e)}")
+            return []
+        finally:
+            self._clear_memory()
+
+    def query_batch(self, questions: list[str], top_k: int = 5) -> list:
+        """Query the vector store with a question and return top_k results"""
+        try:
+            # Query management
+            self.query_count += len(questions)
+            if self.query_count >= CLEANUP_INTERVAL:
+                self.clear_cache()
+                self.query_count = 0
+
+            # Generate embedding using main model
+            query_embeddings = self.embedding_model.encode(
+                questions, convert_to_numpy=True, normalize_embeddings=True
+            )
+
+            if len(self._cached_embeddings) < MAX_CACHE_SIZE:
+                for question, embedding in zip(questions, query_embeddings):
+                    self._cached_embeddings[question] = embedding
+
+            # Search FAISS index
+            scores, indices = self.index.search(query_embeddings, top_k)
+
+            # Format results
+            results = []
+            for i_arr, score_arr in zip(indices, scores):
+                inner_results = []
+                for i, score in zip(i_arr, score_arr):
+                    if i < 0:
+                        continue
+                    try:
+                        item = self.metadata_db[i]
+                        context_str = " → ".join(
+                            item["metadata"].get("headers_context", [])
+                        )
+                        content_preview = (
+                            f"[Context: {context_str}]\n{item['document'][:500]}..."
+                        )
+
+                        inner_results.append(
+                            {
+                                "score": float(score),
+                                "id": self.metadata_db[i]["id"],
+                                "title": item["metadata"].get("title", ""),
+                                "source": item["metadata"].get("source", ""),
+                                "content_type": item["metadata"].get(
+                                    "content_type", "text"
+                                ),
+                                "content": content_preview,
+                                "full_metadata": item["metadata"],
+                            }
+                        )
+                    except IndexError:
+                        logger.warning(f"Invalid index {i} in metadata database")
+
+                results.append(inner_results)
             return results
 
         except Exception as e:

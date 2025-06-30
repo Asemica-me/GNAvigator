@@ -196,19 +196,20 @@ class MistralLLM:
 class RAGOrchestrator:
     """Orchestrates RAG workflow with enhanced memory management"""
 
-    def __init__(self, mistral_api_key: str):
+    def __init__(self, mistral_api_key: str, device: str = None):
         self.mistral_api_key = mistral_api_key
         self._vector_db = None
         self._llm = None
         self.last_cleanup = time.time()
         self.query_count = 0
         self.tokenizer = self._initialize_tokenizer()
+        self.device = device
 
     @property
     def vector_db(self):
         """Lazy initialization of vector database"""
         if self._vector_db is None:
-            self._vector_db = VectorDatabaseManager()
+            self._vector_db = VectorDatabaseManager(device=self.device)
         return self._vector_db
 
     @property
@@ -350,6 +351,10 @@ class RAGOrchestrator:
         # Run synchronous vector store query in executor
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self.vector_db.query, question, top_k)
+
+    def retrieve_docs_batch(self, questions: list[str], top_k: int = 5) -> list:
+        """Retrieve documents without generating full response"""
+        return self.vector_db.query_batch(questions, top_k)
 
     def tokenize(self, text: str) -> list:
         """Tokenize text for approximate token counting"""
