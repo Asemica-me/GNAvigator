@@ -11,7 +11,7 @@ import nltk
 import numpy as np
 from dotenv import load_dotenv
 from mistralai import Mistral, SystemMessage, UserMessage
-from rank_bm25 import BM25Okapi
+# from rank_bm25 import BM25Okapi
 from sentence_transformers import CrossEncoder
 
 from vector_store import VectorDatabaseManager
@@ -361,31 +361,31 @@ class RAGOrchestrator:
         return self.tokenizer(text) if callable(self.tokenizer) else text.split()
 
 
-class HybridRetriever:
-    def __init__(self, chunks):
-        self.chunks = chunks
-        self.tokenized_chunks = [
-            nltk.word_tokenize(chunk["content"]) for chunk in chunks
-        ]
-        self.bm25 = BM25Okapi(self.tokenized_chunks)
-        self.cross_encoder = CrossEncoder("cross-encoder/mmarco-mMiniLMv2-L6-H384-v1")
+# class HybridRetriever:
+#     def __init__(self, chunks):
+#         self.chunks = chunks
+#         self.tokenized_chunks = [
+#             nltk.word_tokenize(chunk["content"]) for chunk in chunks
+#         ]
+#         self.bm25 = BM25Okapi(self.tokenized_chunks)
+#         self.cross_encoder = CrossEncoder("cross-encoder/mmarco-mMiniLMv2-L6-H384-v1")
 
-    def retrieve(self, query: str, top_k: int = 5):
-        # BM25 retrieval
-        tokenized_query = nltk.word_tokenize(query)
-        bm25_scores = self.bm25.get_scores(tokenized_query)
-        bm25_indices = np.argsort(bm25_scores)[::-1][: top_k * 3]  # Get 3x candidates
+#     def retrieve(self, query: str, top_k: int = 5):
+#         # BM25 retrieval
+#         tokenized_query = nltk.word_tokenize(query)
+#         bm25_scores = self.bm25.get_scores(tokenized_query)
+#         bm25_indices = np.argsort(bm25_scores)[::-1][: top_k * 3]  # Get 3x candidates
 
-        # Rerank with cross-encoder
-        pairs = [(query, self.chunks[i]["content"]) for i in bm25_indices]
-        ce_scores = self.cross_encoder.predict(pairs)
+#         # Rerank with cross-encoder
+#         pairs = [(query, self.chunks[i]["content"]) for i in bm25_indices]
+#         ce_scores = self.cross_encoder.predict(pairs)
 
-        # Combine scores
-        combined_scores = [
-            0.7 * ce_scores[i] + 0.3 * bm25_scores[bm25_indices[i]]
-            for i in range(len(bm25_indices))
-        ]
+#         # Combine scores
+#         combined_scores = [
+#             0.7 * ce_scores[i] + 0.3 * bm25_scores[bm25_indices[i]]
+#             for i in range(len(bm25_indices))
+#         ]
 
-        # Get top k results
-        best_indices = np.argsort(combined_scores)[::-1][:top_k]
-        return [self.chunks[bm25_indices[i]] for i in best_indices]
+#         # Get top k results
+#         best_indices = np.argsort(combined_scores)[::-1][:top_k]
+#         return [self.chunks[bm25_indices[i]] for i in best_indices]

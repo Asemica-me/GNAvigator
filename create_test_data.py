@@ -66,5 +66,5 @@ async def generate_question_for_doc(orchestrator, document):
 
 if __name__ == "__main__":
     asyncio.run(
-        generate_test_data(output_file="data/test_dataset.json", num_questions=100)
+        generate_test_data(output_file="data/test_dataset.json", num_questions=400)
     )
