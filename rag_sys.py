@@ -5,6 +5,7 @@ import os
 import re
 import time
 from typing import Any, Dict, List, Optional
+import hashlib
 
 import backoff
 import nltk
@@ -38,6 +39,8 @@ class MistralLLM:
         self.max_retries = max_retries
         self.semaphore = asyncio.Semaphore(max_concurrency)
         self.citation_regex = re.compile(r"\[(\d+)\]")
+        self.url_to_id = {}
+        self.id_to_url = {}
         self._client = None  # Use lazy initialization
         self.last_used = time.time()
 
@@ -63,6 +66,10 @@ class MistralLLM:
         gc.collect()
         logger.info("MistralLLM cache cleared")
 
+    def _generate_url_id(self, url: str) -> str:
+        """Generate unique ID from URL using hash"""
+        return hashlib.md5(url.encode()).hexdigest()[:12]
+
     def _build_rag_prompt(
         self,
         question: str,
@@ -70,6 +77,9 @@ class MistralLLM:
         chat_history: Optional[List[Dict[str, str]]] = None,
     ) -> List[Dict[str, Any]]:
         """Construct RAG system prompt with context"""
+        # RESET per query to prevent conflicts
+        self.url_to_id = {}
+        self.id_to_url = {}
         system_content = """
         Sei un assistente virtuale incaricato di rispondere a domande sul manuale operativo del Geoportale Nazionale Archeologia (GNA), disponibile all'indirizzo: https://gna.cultura.gov.it/wiki/index.php/Pagina_principale, e gestito dall'Istituto Centrale per il Catalogo e la Documentazione (ICCD).
 
@@ -170,6 +180,8 @@ class MistralLLM:
                     del messages
                 if stream is not None:
                     del stream
+                self.url_to_id = {}
+                self.id_to_url = {}
                 gc.collect()
 
     def _format_references(self, response: str) -> str:
