@@ -68,3 +68,4 @@ if __name__ == "__main__":
     asyncio.run(
         generate_test_data(output_file="data/test_dataset.json", num_questions=400)
     )
+# This script generates a test dataset of questions based on document chunks.
