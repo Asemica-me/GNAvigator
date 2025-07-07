@@ -90,7 +90,7 @@ class MistralLLM:
             - Le fonti sono fornite nel contesto della domanda e sono numerate in ordine crescente;
             - Usa numeri diversi per fonti diverse;
             - Non includere mai l'URL nel corpo della risposta;
-        4. Alla fine della risposta, aggiungi un elenco di riferimenti nel formato:
+        4. Alla fine della risposta, aggiungi un elenco di riferimenti con il seguente formato, su righe separate:
             [ID] URL_completo
         5. Se non hai informazioni sufficienti per rispondere, rispondi "Non ho informazioni sufficienti".
 

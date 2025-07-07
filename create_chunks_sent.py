@@ -1,4 +1,4 @@
-# this chunking logic is based on character count (char_count) and text buffer accumulation
+# this chunking logic is based on sentence-based chunking strategy
 import os
 from dotenv import load_dotenv
 import pandas as pd
@@ -256,34 +256,28 @@ def create_semantic_chunks(page_data: dict) -> list:
     url = page_data['url']
     title = page_data['title']
     final_chunks = []
-    text_buffer = []
-    current_context = []
-    char_count = 0
     chunk_index = 0
+    current_headers = []  # Track current header hierarchy
+    text_buffer = []  # Sentences buffer
+    char_count = 0 
 
-    # Track last header to prevent duplicates
-    last_header_content = None
+    sentence_queue = []
 
     def create_chunk(content: str, context: list, content_type: str = "text"):
         nonlocal chunk_index
-        # Prepend header context to content
-        context_str = " | ".join(context) if context else ""
-        full_content = f"[{context_str}] {content}" if context_str else content
-        
-        # Add minimum length check
-        if len(full_content.strip()) < MIN_CHUNK_LENGTH:
+        if len(content.strip()) < MIN_CHUNK_LENGTH:
             return None
-        
+            
         # Deduplicate context headers
         context_headers = []
-        seen_headers = set()
+        seen = set()
         for header in context:
-            if header not in seen_headers:
+            if header not in seen:
                 context_headers.append(header)
-                seen_headers.add(header)
+                seen.add(header)
 
         keywords, entities = extract_keywords_and_entities(content)
-        return {
+        chunk = {
             'chunk_id': generate_chunk_id(url, chunk_index),
             'source': url,
             'content_type': content_type,
@@ -294,111 +288,129 @@ def create_semantic_chunks(page_data: dict) -> list:
             'content': content,
             'chunk_index': chunk_index
         }
+        chunk_index += 1
+        return chunk
 
+    def finalize_buffer():
+        """Create chunk from buffer and reset with overlap"""
+        nonlocal text_buffer, char_count
+        if not text_buffer:
+            return
+            
+        chunk_text = " ".join(text_buffer)
+        if len(chunk_text) >= MIN_CHUNK_LENGTH:
+            chunk = create_chunk(chunk_text, current_headers.copy())
+            if chunk:
+                final_chunks.append(chunk)
+        
+        # Maintain overlap by keeping last few sentences
+        overlap_sentences = []
+        overlap_count = 0
+        for sent in reversed(text_buffer):
+            if overlap_count + len(sent) > CHUNK_OVERLAP and overlap_sentences:
+                break
+            overlap_sentences.insert(0, sent)
+            overlap_count += len(sent)
+        
+        text_buffer = overlap_sentences
+        char_count = sum(len(s) for s in text_buffer) + max(0, len(text_buffer) - 1)
+
+    # Process all structured content
     for item in page_data['structured_content']:
         item_type = item['type']
-        context = item['context']
         content = item['content']
+        context = item['context']
 
-        # Handle headers (update context but don't create chunks)
+        # Update header context
         if item_type == 'header':
-            # Only update if different from last header
-            if content != last_header_content:
-                # Use the context from the header item (which already includes hierarchy)
-                current_context = context
-                last_header_content = content
+            level = item.get('level', 2)
+            # Reset lower-level headers
+            current_headers = current_headers[:level-1] + [content]
+            # Finalize current buffer before new section
+            finalize_buffer()
             continue
 
-        # Handle tables as separate chunks
-        elif item_type == 'table':
-            # Flush any text buffer first
-            if text_buffer:
-                chunk = create_chunk(" ".join(text_buffer), current_context)
-                final_chunks.append(chunk)
-                chunk_index += 1
-                text_buffer = []
-                char_count = 0
-                
-            # Create table chunk
-            chunk = create_chunk(content, context, 'table')
-            final_chunks.append(chunk)
-            chunk_index += 1
-            continue
-
-        # Handle lists as separate chunks
-        elif item_type == 'list':
-            # Flush text buffer
-            if text_buffer:
-                chunk = create_chunk(" ".join(text_buffer), current_context)
-                final_chunks.append(chunk)
-                chunk_index += 1
-                text_buffer = []
-                char_count = 0
-                
-            # Create list chunk
-            chunk = create_chunk(content, context, 'list')
-            final_chunks.append(chunk)
-            chunk_index += 1
-            continue
-
-        # Handle images (requires OCR processing later)
-        elif item_type == 'image':
-            # Flush text buffer
-            if text_buffer:
-                chunk = create_chunk(" ".join(text_buffer), current_context)
-                final_chunks.append(chunk)
-                chunk_index += 1
-                text_buffer = []
-                char_count = 0
-                
-            # Store for later OCR processing
-            final_chunks.append({
-                'type': 'image_reference',
-                'image_data': content,
-                'context': context
-            })
+        # Handle non-text elements (finalize buffer first)
+        if item_type in ['table', 'list', 'image']:
+            finalize_buffer()
+            
+            if item_type == 'table':
+                chunk = create_chunk(content, context, 'table')
+                if chunk:
+                    final_chunks.append(chunk)
+            elif item_type == 'list':
+                chunk = create_chunk(content, context, 'list')
+                if chunk:
+                    final_chunks.append(chunk)
+            elif item_type == 'image':
+                # Store for OCR processing later
+                final_chunks.append({
+                    'type': 'image_reference',
+                    'image_data': content,
+                    'context': context
+                })
             continue
 
         # Process text content (paragraphs and raw text)
         if item_type in ['paragraph', 'text']:
-            # Handle long sentences
-            sentences = nltk.sent_tokenize(content, language='italian')
-            for sentence in sentences:
-                # Split oversized sentences
-                if len(sentence) > CHUNK_SIZE:
-                    parts = [sentence[i:i+CHUNK_SIZE] for i in range(0, len(sentence), CHUNK_SIZE)]
+            # Process content with spaCy for sentence segmentation
+            doc = nlp(content)
+            for sent in doc.sents:
+                sentence_text = sent.text.strip()
+                if not sentence_text:
+                    continue
+                    
+                sent_len = len(sentence_text)
+                
+                # Check if we need to split oversized sentence
+                if sent_len > CHUNK_SIZE:
+                    # Split into parts by words
+                    words = sentence_text.split()
+                    parts = []
+                    current_part = []
+                    current_len = 0
+                    
+                    for word in words:
+                        word_len = len(word)
+                        if current_part and current_len + word_len + 1 > CHUNK_SIZE:
+                            parts.append(" ".join(current_part))
+                            current_part = [word]
+                            current_len = word_len
+                        else:
+                            if current_part:
+                                current_len += 1  # Space
+                            current_part.append(word)
+                            current_len += word_len
+                    
+                    if current_part:
+                        parts.append(" ".join(current_part))
+                    
+                    # Add parts to processing queue
                     for part in parts:
-                        if char_count + len(part) > CHUNK_SIZE and text_buffer:
-                            chunk = create_chunk(" ".join(text_buffer), current_context)
-                            final_chunks.append(chunk)
-                            chunk_index += 1
-                            
-                            # Maintain overlap
-                            overlap_start = max(0, len(text_buffer) - max(1, int(len(text_buffer) * CHUNK_OVERLAP/CHUNK_SIZE)))
-                            text_buffer = text_buffer[overlap_start:]
-                            char_count = sum(len(s) for s in text_buffer)
-                            
-                        text_buffer.append(part)
-                        char_count += len(part)
+                        if part:
+                            sentence_queue.append(part)
                 else:
-                    if char_count + len(sentence) > CHUNK_SIZE and text_buffer:
-                        chunk = create_chunk(" ".join(text_buffer), current_context)
-                        final_chunks.append(chunk)
-                        chunk_index += 1
-                        
-                        # Maintain overlap
-                        overlap_start = max(0, len(text_buffer) - max(1, int(len(text_buffer) * CHUNK_OVERLAP/CHUNK_SIZE)))
-                        text_buffer = text_buffer[overlap_start:]
-                        char_count = sum(len(s) for s in text_buffer)
-                        
-                    text_buffer.append(sentence)
-                    char_count += len(sentence)
+                    sentence_queue.append(sentence_text)
+            
+            # Process sentence queue
+            while sentence_queue:
+                sentence = sentence_queue.pop(0)
+                sent_len = len(sentence)
+                
+                # Calculate new size if we add this sentence
+                new_size = char_count + sent_len + (1 if text_buffer else 0)
+                
+                # Finalize chunk if adding sentence would exceed size
+                if text_buffer and new_size > CHUNK_SIZE:
+                    finalize_buffer()
+                
+                # Add sentence to buffer
+                text_buffer.append(sentence)
+                char_count = new_size
 
-    # Process remaining text buffer
-    if text_buffer:
-        chunk = create_chunk(" ".join(text_buffer), current_context)
-        final_chunks.append(chunk)
-        
+    # Finalize any remaining content
+    finalize_buffer()
+    
     return final_chunks
 
 async def process_page(client: httpx.AsyncClient, url: str, base_domain: str, ocr_semaphore: asyncio.Semaphore) -> list:
