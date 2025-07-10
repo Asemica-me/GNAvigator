@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from rag_sys import RAGOrchestrator
 
 load_dotenv()
-METRICS_DIR = os.path.join("data", "metrics")
+METRICS_DIR = os.path.join("data", "retrieval_metrics")
 os.makedirs(METRICS_DIR, exist_ok=True)
 
 
@@ -230,17 +230,17 @@ class RAGEvaluator:
         df = pd.DataFrame(metrics["by_question"])
         df.to_csv(details_file, index=False)
 
-        # Save error analysis
-        errors_file = os.path.join(METRICS_DIR, f"{prefix}_errors.csv")
-        error_df = df[(df["precision@k"] < 0.3) | (df["recall@k"] < 0.3)]
-        if not error_df.empty:
-            error_df.to_csv(errors_file, index=False)
+        # # Save error analysis
+        # errors_file = os.path.join(METRICS_DIR, f"{prefix}_errors.csv")
+        # error_df = df[(df["recall@k"] < 0.3)]
+        # if not error_df.empty:
+        #     error_df.to_csv(errors_file, index=False)
 
         print(f"\nReports saved to {METRICS_DIR}:")
         print(f"- {prefix}_metrics.json (aggregate metrics)")
         print(f"- {prefix}_details.csv (per-query results)")
-        if not error_df.empty:
-            print(f"- {prefix}_errors.csv ({len(error_df)} problematic queries)")
+        # if not error_df.empty:
+        #     print(f"- {prefix}_errors.csv ({len(error_df)} problematic queries)")
 
 
 def main(test_file, top_k=5):
