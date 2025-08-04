@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
-from create_chunks_sent import BASE_DOMAIN, SITEMAP_PATH, crawl_and_chunk
+from create_chunks import BASE_DOMAIN, SITEMAP_PATH, crawl_and_chunk
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

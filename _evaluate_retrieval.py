@@ -1,3 +1,4 @@
+from ablation import experiments
 import json
 import os
 import time
@@ -7,17 +8,35 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from rag_sys import RAGOrchestrator
+import inspect
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 
 load_dotenv()
 METRICS_DIR = os.path.join("data", "metrics")
 os.makedirs(METRICS_DIR, exist_ok=True)
 
+class AblationOrchestrator(RAGOrchestrator):
+    def __init__(self, mistral_api_key: str, retriever, device: str = None):
+        super().__init__(mistral_api_key, device=device)
+        self.custom_retriever = retriever
+
+    async def retrieve_docs(self, question: str, top_k: int = 5):
+        result = self.custom_retriever.retrieve(question, top_k=top_k)
+        return result
+
+    def retrieve_docs_batch(self, questions: list, top_k: int = 5):
+        return [self.custom_retriever.retrieve(q, top_k=top_k) for q in questions]
+
+
 
 class RAGEvaluator:
-    def __init__(self, mistral_api_key: str, batch_size: int = 32, device: str = None):
-        self.orchestrator = RAGOrchestrator(
-            mistral_api_key=mistral_api_key, device=device
-        )
+    def __init__(self, mistral_api_key: str, batch_size: int = 32, device: str = None, orchestrator_class=RAGOrchestrator, retriever=None):
+        if retriever is not None:
+            self.orchestrator = orchestrator_class(mistral_api_key, retriever, device=device)
+        else:
+            self.orchestrator = RAGOrchestrator(mistral_api_key=mistral_api_key, device=device)
         self.metrics = []
         self.batch_size = batch_size
 
@@ -243,32 +262,52 @@ class RAGEvaluator:
             print(f"- {prefix}_errors.csv ({len(error_df)} problematic queries)")
 
 
-def main(test_file, top_k=5):
+def ablation_main(test_file, top_k=5):
     mistral_key = os.getenv("MISTRAL_API_KEY")
     if not mistral_key:
         print("Error: MISTRAL_API_KEY not found in environment variables")
         return
 
-    evaluator = RAGEvaluator(mistral_api_key=mistral_key, batch_size=32, device="cpu")
+    retriever_confs = []
 
-    print("Starting evaluation...")
-    metrics = evaluator.evaluate_retrieval(test_file, top_k)
+    # Simple retrievers
+    retriever_confs.append(("dense", experiments.DenseRetriever()))
+    retriever_confs.append(("bm25", experiments.BM25Retriever()))
+    retriever_confs.append(("hybrid", experiments.HybridRetriever(alpha=0.3)))
 
-    if not metrics or metrics["num_queries"] == 0:
-        print("Evaluation failed or no queries processed")
-        return
+    # Rerankers
+    retriever_confs.append(("rerank_dense", experiments.RerankRetriever(base_retriever=experiments.DenseRetriever())))
+    retriever_confs.append(("rerank_bm25", experiments.RerankRetriever(base_retriever=experiments.BM25Retriever())))
 
-    print("\n=== Evaluation Results ===")
-    print(f"Queries evaluated: {metrics['num_queries']}")
-    print(f"Avg Precision@{top_k}: {metrics['avg_precision@k']:.2%}")
-    print(f"Avg Recall@{top_k}: {metrics['avg_recall@k']:.2%}")
-    print(f"Mean Reciprocal Rank: {metrics['avg_mrr']:.4f}")
-    print(f"Avg Retrieval Time: {metrics['avg_retrieval_time']:.4f}s")
-    print(f"Total Input Tokens: {metrics['total_input_tokens']}")
+    # Query rewrite
+    retriever_confs.append(("qrewrite_dense", experiments.QueryRewriteRetriever(base_retriever=experiments.DenseRetriever())))
+    retriever_confs.append(("qrewrite_bm25", experiments.QueryRewriteRetriever(base_retriever=experiments.BM25Retriever())))
 
-    evaluator.save_reports(metrics)
+    for name, retriever in retriever_confs:
+        print(f"\n========== Running ablation for {name} ==========")
+        evaluator = RAGEvaluator(
+            mistral_api_key=mistral_key,
+            batch_size=32,
+            device="cpu",
+            orchestrator_class=AblationOrchestrator,
+            retriever=retriever
+        )
 
+        metrics = evaluator.evaluate_retrieval(test_file, top_k)
+        if not metrics or metrics["num_queries"] == 0:
+            print(f"Evaluation failed or no queries processed for {name}")
+            continue
+
+        print(f"\n=== {name.upper()} Results ===")
+        print(f"Queries evaluated: {metrics['num_queries']}")
+        print(f"Avg Precision@{top_k}: {metrics['avg_precision@k']:.2%}")
+        print(f"Avg Recall@{top_k}: {metrics['avg_recall@k']:.2%}")
+        print(f"Mean Reciprocal Rank: {metrics['avg_mrr']:.4f}")
+        print(f"Avg Retrieval Time: {metrics['avg_retrieval_time']:.4f}s")
+        print(f"Total Input Tokens: {metrics['total_input_tokens']}")
+
+        evaluator.save_reports(metrics, prefix=f"evaluation_{name}")
 
 if __name__ == "__main__":
     test_file = os.path.join("data", "test_dataset.json")
-    main(test_file, top_k=5)
+    ablation_main(test_file, top_k=5)

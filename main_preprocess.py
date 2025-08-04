@@ -81,7 +81,7 @@ def run_chunking(logger):
     # Create chunks directory if needed
     os.makedirs(CHUNKS_DIR, exist_ok=True)
     
-    script_path = os.path.join(SCRIPT_DIR, "create_chunks_sent.py")
+    script_path = os.path.join(SCRIPT_DIR, "create_chunks.py")
     venv_python = get_venv_python()
     
     # Create environment with activated virtualenv

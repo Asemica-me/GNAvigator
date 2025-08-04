@@ -1,4 +1,3 @@
-# this chunking logic is based on character count (char_count) and text buffer accumulation
 import os
 from dotenv import load_dotenv
 import pandas as pd
