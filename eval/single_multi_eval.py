@@ -13,6 +13,7 @@ from rag_sys import RAGOrchestrator
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+os.chdir(PROJECT_ROOT)
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 GEN_MODEL = os.getenv("GEN_MODEL")
@@ -235,7 +236,7 @@ class RAGEvaluator:
             return o
 
         # Save aggregate metrics
-        metrics_file = os.path.join(METRICS_DIR, f"{prefix}_metrics.json")
+        metrics_file = os.path.join(METRICS_DIR, f"{prefix}_metrics_single_multi.json")
         with open(metrics_file, "w", encoding="utf-8") as f:
             json.dump(
                 {k: convert(v) for k, v in metrics.items() if k != "by_question"},
@@ -245,9 +246,9 @@ class RAGEvaluator:
             )
 
         # Save detailed results as CSV
-        details_file = os.path.join(METRICS_DIR, f"{prefix}_details.csv")
-        df = pd.DataFrame(metrics["by_question"])
-        df.to_csv(details_file, index=False)
+        # details_file = os.path.join(METRICS_DIR, f"{prefix}_details.csv")
+        # df = pd.DataFrame(metrics["by_question"])
+        # df.to_csv(details_file, index=False)
 
         # # Save error analysis
         # errors_file = os.path.join(METRICS_DIR, f"{prefix}_errors.csv")
@@ -312,7 +313,7 @@ def main(test_file, top_k=5):
     print(f"Avg Retrieval Time: {metrics['avg_retrieval_time']:.4f}s")
     print(f"Total Input Tokens: {metrics['total_input_tokens']}")
 
-    evaluator.save_reports(metrics, prefix="combined_eval")
+    evaluator.save_reports(metrics, prefix="eval")
 
 
 if __name__ == "__main__":

@@ -201,7 +201,7 @@ class RAGEvaluator:
             "by_question": metrics_df.to_dict(orient="records"),
         }
 
-    def save_reports(self, metrics, prefix="evaluation"):
+    def save_reports(self, metrics, prefix="eval"):
         """Save all reports to metrics directory"""
         if metrics is None or metrics["num_queries"] == 0:
             print("No metrics to save")
@@ -216,7 +216,7 @@ class RAGEvaluator:
             return o
 
         # Save aggregate metrics
-        metrics_file = os.path.join(METRICS_DIR, f"{prefix}_metrics.json")
+        metrics_file = os.path.join(METRICS_DIR, f"{prefix}_metrics_baseline.json")
         with open(metrics_file, "w", encoding="utf-8") as f:
             json.dump(
                 {k: convert(v) for k, v in metrics.items() if k != "by_question"},
@@ -226,9 +226,9 @@ class RAGEvaluator:
             )
 
         # Save detailed results as CSV
-        details_file = os.path.join(METRICS_DIR, f"{prefix}_details.csv")
-        df = pd.DataFrame(metrics["by_question"])
-        df.to_csv(details_file, index=False)
+        # details_file = os.path.join(METRICS_DIR, f"{prefix}_details_baseline.csv")
+        # df = pd.DataFrame(metrics["by_question"])
+        # df.to_csv(details_file, index=False)
 
         # # Save error analysis
         # errors_file = os.path.join(METRICS_DIR, f"{prefix}_errors.csv")
@@ -258,7 +258,7 @@ def main(test_file, top_k=5):
         print("Evaluation failed or no queries processed")
         return
 
-    print("\n=== Evaluation Results ===")
+    print("\n=== Evaluation Results (Baseline on single-label) ===")
     print(f"Queries evaluated: {metrics['num_queries']}")
     print(f"Avg Precision@{top_k}: {metrics['avg_precision@k']:.2%}")
     print(f"Avg Recall@{top_k}: {metrics['avg_recall@k']:.2%}")
@@ -270,5 +270,5 @@ def main(test_file, top_k=5):
 
 
 if __name__ == "__main__":
-    test_file = os.path.join("data", "test", "test_dataset_multihop.json")
+    test_file = os.path.join("data", "test", "test_dataset_singlehop.json")
     main(test_file, top_k=5)
