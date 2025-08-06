@@ -1,16 +1,35 @@
 import json
 import os
 import time
-
+import random
 import numpy as np
 import pandas as pd
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from dotenv import load_dotenv
 
 from rag_sys import RAGOrchestrator
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DATA_DIR = os.path.join(PROJECT_ROOT, "data")
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+GEN_MODEL = os.getenv("GEN_MODEL")
+
+OUTPUT_FILE = os.path.join(DATA_DIR, "test", "test_dataset_multihop.json")
+
 METRICS_DIR = os.path.join("data", "metrics")
 os.makedirs(METRICS_DIR, exist_ok=True)
+
+def load_and_shuffle_datasets(singlehop_path, multihop_path):
+    with open(singlehop_path, encoding="utf-8") as f1:
+        singlehop = json.load(f1)
+    with open(multihop_path, encoding="utf-8") as f2:
+        multihop = json.load(f2)
+    combined = singlehop + multihop
+    random.shuffle(combined)
+    return combined
 
 
 class RAGEvaluator:
@@ -242,33 +261,60 @@ class RAGEvaluator:
         # if not error_df.empty:
         #     print(f"- {prefix}_errors.csv ({len(error_df)} problematic queries)")
 
+    def evaluate_retrieval_from_data(self, test_data, top_k: int = 5):
+        """Run evaluation on test dataset passed as list of dicts"""
+        if not test_data:
+            print("Error: No data provided.")
+            return None
+
+        # Run evaluations concurrently
+        results = []
+        batch_size = min(self.batch_size, len(test_data))
+        for i in range(0, len(test_data), batch_size):
+            batch = test_data[i : i + batch_size]
+            questions_batch = [item["question"] for item in batch]
+            relevant_docs_batch = [set(item["relevant_docs"]) for item in batch]
+            results.extend(
+                self._evaluate_query_batch(questions_batch, relevant_docs_batch, top_k)
+            )
+
+        self.metrics = results
+        return self._aggregate_metrics()
+
 
 def main(test_file, top_k=5):
+ 
+    SINGLEHOP_FILE = os.path.join(DATA_DIR, "test", "test_dataset_singlehop.json")
+    MULTIHOP_FILE = os.path.join(DATA_DIR, "test", "test_dataset_multihop.json")
+
+    # 1. Load and shuffle
+    test_data = load_and_shuffle_datasets(SINGLEHOP_FILE, MULTIHOP_FILE)
+    # 2. Evaluate
     mistral_key = os.getenv("MISTRAL_API_KEY")
     if not mistral_key:
         print("Error: MISTRAL_API_KEY not found in environment variables")
-        return
+        exit(1)
 
     evaluator = RAGEvaluator(mistral_api_key=mistral_key, batch_size=32, device="cpu")
 
-    print("Starting evaluation...")
-    metrics = evaluator.evaluate_retrieval(test_file, top_k)
+    print("Starting evaluation on combined, shuffled dataset...")
+    metrics = evaluator.evaluate_retrieval_from_data(test_data, top_k=5)
 
     if not metrics or metrics["num_queries"] == 0:
         print("Evaluation failed or no queries processed")
-        return
+        exit(1)
 
-    print("\n=== Evaluation Results ===")
+    print("\n=== Evaluation Results (w/ multihop data) ===")
     print(f"Queries evaluated: {metrics['num_queries']}")
-    print(f"Avg Precision@{top_k}: {metrics['avg_precision@k']:.2%}")
-    print(f"Avg Recall@{top_k}: {metrics['avg_recall@k']:.2%}")
+    print(f"Avg Precision@5: {metrics['avg_precision@k']:.2%}")
+    print(f"Avg Recall@5: {metrics['avg_recall@k']:.2%}")
     print(f"Mean Reciprocal Rank: {metrics['avg_mrr']:.4f}")
     print(f"Avg Retrieval Time: {metrics['avg_retrieval_time']:.4f}s")
     print(f"Total Input Tokens: {metrics['total_input_tokens']}")
 
-    evaluator.save_reports(metrics)
+    evaluator.save_reports(metrics, prefix="combined_eval")
 
 
 if __name__ == "__main__":
-    test_file = os.path.join("data", "test", "test_dataset_multihop.json")
+    test_file = OUTPUT_FILE
     main(test_file, top_k=5)

@@ -1,15 +1,20 @@
 import asyncio
 import json
 import os
-
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from dotenv import load_dotenv
 
 from rag_sys import RAGOrchestrator
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 GEN_MODEL = os.getenv("GEN_MODEL")
 
+OUTPUT_FILE = os.path.join(DATA_DIR, "test", "test_dataset_singlehop.json")
 
 async def generate_test_data(output_file=None, num_questions=550):
     """Generate test questions from document chunks"""
@@ -63,9 +68,7 @@ async def generate_question_for_doc(orchestrator, document):
     response = await orchestrator.llm.generate_async(question=prompt, context=[])
     return response.strip()
 
-
 if __name__ == "__main__":
     asyncio.run(
-        generate_test_data(output_file="data/test_dataset.json", num_questions=550)
+        generate_test_data(output_file=OUTPUT_FILE, num_questions=550)
     )
-# This script generates a test dataset of questions based on document chunks.

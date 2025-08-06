@@ -1,17 +1,31 @@
 import json
 import os
 import time
-
+from sklearn.metrics import ndcg_score, average_precision_score
 import numpy as np
 import pandas as pd
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from dotenv import load_dotenv
 
 from rag_sys import RAGOrchestrator
 
-load_dotenv()
-METRICS_DIR = os.path.join("data", "metrics")
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DATA_DIR = os.path.join(PROJECT_ROOT, "data")
+METRICS_DIR = os.path.join(DATA_DIR, "metrics")
 os.makedirs(METRICS_DIR, exist_ok=True)
 
+def compute_ndcg(relevant_ids, retrieved_ids, k=5):
+    """Binary relevance for ndcg_score: 1 if retrieved doc is relevant, else 0."""
+    y_true = [1 if rid in relevant_ids else 0 for rid in retrieved_ids[:k]]
+    y_score = [k - i for i in range(len(retrieved_ids[:k]))]  # or all 1's, doesn't matter for binary
+    return ndcg_score([y_true], [y_score]) if any(y_true) else 0.0
+
+def compute_ap(relevant_ids, retrieved_ids, k=5):
+    """Binary relevance for average_precision_score."""
+    y_true = [1 if rid in relevant_ids else 0 for rid in retrieved_ids[:k]]
+    return average_precision_score([1 if i in relevant_ids else 0 for i in retrieved_ids[:k]], y_true) if any(y_true) else 0.0
 
 class RAGEvaluator:
     def __init__(self, mistral_api_key: str, batch_size: int = 32, device: str = None):
@@ -65,6 +79,8 @@ class RAGEvaluator:
             relevant_retrieved = len(retrieved_ids & relevant_docs)
             precision = relevant_retrieved / top_k if top_k > 0 else 0
             recall = relevant_retrieved / len(relevant_docs) if relevant_docs else 0
+            ndcg = compute_ndcg(relevant_docs, list(retrieved_ids), k=top_k)
+            ap = compute_ap(relevant_docs, list(retrieved_ids), k=top_k)
 
             # Calculate MRR
             reciprocal_rank = 0
@@ -86,6 +102,8 @@ class RAGEvaluator:
                 "precision@k": precision,
                 "recall@k": recall,
                 "mrr": reciprocal_rank,
+                "ndcg@k": ndcg,
+                "ap@k": ap,
                 "retrieval_time": retrieval_time,
                 "input_tokens": input_tokens,
                 "retrieved_docs": list(retrieved_ids),
@@ -100,6 +118,8 @@ class RAGEvaluator:
                 "precision@k": 0,
                 "recall@k": 0,
                 "mrr": 0,
+                "ndcg@k": 0,
+                "ap@k": 0,
                 "retrieval_time": 0,
                 "input_tokens": 0,
                 "retrieved_docs": [],
@@ -131,7 +151,7 @@ class RAGEvaluator:
                 relevant_retrieved = len(retrieved_ids & relevant_docs)
                 precision = relevant_retrieved / top_k if top_k > 0 else 0
                 recall = relevant_retrieved / len(relevant_docs) if relevant_docs else 0
-
+            
                 # Calculate MRR
                 reciprocal_rank = 0
                 if retrieved_docs:
@@ -139,6 +159,9 @@ class RAGEvaluator:
                         if doc["id"] in relevant_docs:
                             reciprocal_rank = 1 / rank
                             break
+
+                ndcg = compute_ndcg(relevant_docs, list(retrieved_ids), k=top_k)
+                ap = compute_ap(relevant_docs, list(retrieved_ids), k=top_k)
 
                 # Token usage
                 input_tokens = (
@@ -153,6 +176,8 @@ class RAGEvaluator:
                         "precision@k": precision,
                         "recall@k": recall,
                         "mrr": reciprocal_rank,
+                        "ndcg@k": ndcg,
+                        "ap@k": ap,
                         "retrieval_time": retrieval_time,
                         "input_tokens": input_tokens,
                         "retrieved_docs": list(retrieved_ids),
@@ -161,7 +186,6 @@ class RAGEvaluator:
                 )
 
             return results
-
         except Exception:
             return []
 
@@ -173,6 +197,8 @@ class RAGEvaluator:
                 "avg_precision@k": 0,
                 "avg_recall@k": 0,
                 "avg_mrr": 0,
+                "avg_ndcg@k": metrics_df["ndcg@k"].mean(),
+                "avg_ap@k": metrics_df["ap@k"].mean(),
                 "avg_retrieval_time": 0,
                 "total_input_tokens": 0,
                 "by_question": [],
@@ -200,6 +226,17 @@ class RAGEvaluator:
             "total_input_tokens": metrics_df["input_tokens"].sum(),
             "by_question": metrics_df.to_dict(orient="records"),
         }
+    
+    def compute_ndcg(relevant_ids, retrieved_ids, k=5):
+        """Binary relevance for ndcg_score: 1 if retrieved doc is relevant, else 0."""
+        y_true = [1 if rid in relevant_ids else 0 for rid in retrieved_ids[:k]]
+        y_score = [k - i for i in range(len(retrieved_ids[:k]))]  # or all 1's, doesn't matter for binary
+        return ndcg_score([y_true], [y_score]) if any(y_true) else 0.0
+
+    def compute_ap(relevant_ids, retrieved_ids, k=5):
+        """Binary relevance for average_precision_score."""
+        y_true = [1 if rid in relevant_ids else 0 for rid in retrieved_ids[:k]]
+        return average_precision_score([1 if i in relevant_ids else 0 for i in retrieved_ids[:k]], y_true) if any(y_true) else 0.0
 
     def save_reports(self, metrics, prefix="evaluation"):
         """Save all reports to metrics directory"""
@@ -270,5 +307,5 @@ def main(test_file, top_k=5):
 
 
 if __name__ == "__main__":
-    test_file = os.path.join("data", "test", "test_dataset_multihop.json")
+    test_file = os.path.join(DATA_DIR, "test", "test_dataset_multihop.json")
     main(test_file, top_k=5)
