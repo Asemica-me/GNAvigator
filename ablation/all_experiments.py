@@ -32,7 +32,7 @@ class VectorDatabaseWrapper:
             self._cached_embeddings[question] = results
             return results
                 
-            def query_batch(self, questions: list[str], top_k: int = 5) -> list:
+    def query_batch(self, questions: list[str], top_k: int = 5) -> list:
                 # Similar batching implementation with proper caching
                 pass
 
@@ -66,6 +66,10 @@ class BM25Retriever:
     def __init__(self):
         self.vector_db = VectorDatabaseManager()
         self.chunks = [meta['document'] for meta in self.vector_db.metadata_db]
+
+        print(f"\n[BM25] Number of chunks: {len(self.chunks)}")
+        chunk_lengths = [len(c.split()) for c in self.chunks]
+        print(f"[BM25] Chunk length (words): min={min(chunk_lengths)}, max={max(chunk_lengths)}, avg={np.mean(chunk_lengths):.1f}")
         
         # Load Italian linguistic resources
         self.stop_words = set(nltk.corpus.stopwords.words('italian'))

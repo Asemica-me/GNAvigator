@@ -1,15 +1,42 @@
-from ablation import experiments
+from ablation import all_experiments
 import os
+import random
+import pandas as pd
 import json
 import time
+from sklearn.metrics import ndcg_score, average_precision_score
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
+import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from rag_sys import RAGOrchestrator
 
-load_dotenv()
-METRICS_DIR = os.path.join("data", "metrics")
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+os.chdir(PROJECT_ROOT)
+DATA_DIR = os.path.join(PROJECT_ROOT, "data")
+METRICS_DIR = os.path.join(DATA_DIR, "metrics")
 os.makedirs(METRICS_DIR, exist_ok=True)
+
+def load_and_shuffle_datasets(singlehop_path, multihop_path):
+    with open(singlehop_path, encoding="utf-8") as f1:
+        singlehop = json.load(f1)
+    with open(multihop_path, encoding="utf-8") as f2:
+        multihop = json.load(f2)
+    combined = singlehop + multihop
+    random.shuffle(combined)
+    return combined
+
+def compute_ndcg(relevant_ids, retrieved_ids, k=5):
+    y_true = [1 if rid in relevant_ids else 0 for rid in retrieved_ids[:k]]
+    y_score = [k - i for i in range(len(retrieved_ids[:k]))]
+    return ndcg_score([y_true], [y_score]) if any(y_true) else 0.0
+
+def compute_ap(relevant_ids, retrieved_ids, k=5):
+    y_true = [1 if rid in relevant_ids else 0 for rid in retrieved_ids[:k]]
+    return average_precision_score([1 if i in relevant_ids else 0 for i in retrieved_ids[:k]], y_true) if any(y_true) else 0.0
 
 
 class AblationOrchestrator(RAGOrchestrator):
@@ -79,10 +106,16 @@ class RAGEvaluator:
                     reciprocal_rank = 1 / rank
                     break
 
+            ndcg = compute_ndcg(relevant_docs, retrieved_ids, k=top_k)
+            ap = compute_ap(relevant_docs, retrieved_ids, k=top_k)
+
+
             results.append({
                 "precision@k": precision,
                 "recall@k": recall,
                 "mrr": reciprocal_rank,
+                "ndcg@k": ndcg,
+                "ap@k": ap,
                 "retrieval_time": retrieval_time,
                 "input_tokens": len(self.orchestrator.tokenize(questions[0])) if hasattr(self.orchestrator, "tokenize") else 0,
             })
@@ -97,12 +130,20 @@ class RAGEvaluator:
             "avg_precision@k": df["precision@k"].mean(),
             "avg_recall@k": df["recall@k"].mean(),
             "avg_mrr": df["mrr"].mean(),
+            "avg_ndcg@k": df["ndcg@k"].mean(),
+            "avg_ap@k": df["ap@k"].mean(),
             "avg_retrieval_time": df["retrieval_time"].mean(),
             "total_input_tokens": df["input_tokens"].sum(),
         }
 
 
 def ablation_main(test_file, top_k=5):
+    SINGLEHOP_FILE = os.path.join(DATA_DIR, "test", "test_dataset_singlehop.json")
+    MULTIHOP_FILE = os.path.join(DATA_DIR, "test", "test_dataset_multihop.json")
+
+    # 1. Load and shuffle
+    test_data = load_and_shuffle_datasets(SINGLEHOP_FILE, MULTIHOP_FILE)
+
     mistral_key = os.getenv("MISTRAL_API_KEY")
     if not mistral_key:
         print("MISTRAL_API_KEY not set.")
@@ -111,25 +152,25 @@ def ablation_main(test_file, top_k=5):
     retriever_confs = []
 
     # 1. DenseRetriever
-    retriever_confs.append(("dense", experiments.DenseRetriever()))
+    retriever_confs.append(("dense", all_experiments.DenseRetriever()))
 
     # 2. BM25Retriever
-    retriever_confs.append(("bm25", experiments.BM25Retriever()))
+    retriever_confs.append(("bm25", all_experiments.BM25Retriever()))
 
     # 3. HybridRetriever: Try different rrf_k values
     for rrf_k in [30, 60]:
-        retriever_confs.append((f"hybrid_rrf{rrf_k}", experiments.HybridRetriever(rrf_k=rrf_k)))
+        retriever_confs.append((f"hybrid_rrf{rrf_k}", all_experiments.HybridRetriever(rrf_k=rrf_k)))
 
     # 4. RerankRetriever: with both Dense and BM25 as base
-    for base_name, base in [("dense", experiments.DenseRetriever()), ("bm25", experiments.BM25Retriever())]:
-        retriever_confs.append((f"rerank_{base_name}", experiments.RerankRetriever(base_retriever=base)))
+    for base_name, base in [("dense", all_experiments.DenseRetriever()), ("bm25", all_experiments.BM25Retriever())]:
+        retriever_confs.append((f"rerank_{base_name}", all_experiments.RerankRetriever(base_retriever=base)))
 
     # 5. QueryRewriteRetriever: with both Dense and BM25 as base, and different expansion_terms
-    for base_name, base in [("dense", experiments.DenseRetriever()), ("bm25", experiments.BM25Retriever())]:
+    for base_name, base in [("dense", all_experiments.DenseRetriever()), ("bm25", all_experiments.BM25Retriever())]:
         for expansion_terms in [1, 3, 5]:
             retriever_confs.append(
                 (f"qrewrite_{base_name}_exp{expansion_terms}",
-                 experiments.QueryRewriteRetriever(base_retriever=base, expansion_terms=expansion_terms))
+                 all_experiments.QueryRewriteRetriever(base_retriever=base, expansion_terms=expansion_terms))
             )
 
     all_metrics = []
@@ -144,7 +185,7 @@ def ablation_main(test_file, top_k=5):
             retriever=retriever
         )
 
-        metrics = evaluator.evaluate_retrieval(test_file, top_k)
+        metrics = evaluator.evaluate_retrieval(test_data, top_k)
         if not metrics:
             print(f"No metrics for {name}")
             continue
@@ -155,11 +196,11 @@ def ablation_main(test_file, top_k=5):
 
     if all_metrics:
         metrics_df = pd.DataFrame(all_metrics)
-        metrics_df = metrics_df[["method", "avg_precision@k", "avg_recall@k", "avg_mrr", "avg_retrieval_time", "total_input_tokens"]]
+        metrics_df = metrics_df[["method", "avg_precision@k", "avg_recall@k", "avg_mrr", "avg_ndcg@k", "avg_ap@k", "avg_retrieval_time", "total_input_tokens"]]
         metrics_df.to_csv(os.path.join(METRICS_DIR, "ablation_results.csv"), index=False)
         print("\nAll metrics saved to 'ablation_results.csv'.")
 
 
 if __name__ == "__main__":
-    test_file = os.path.join("data", "test_dataset.json")
+    test_file = os.path.join(DATA_DIR, "test", "test_dataset.json")
     ablation_main(test_file, top_k=5)

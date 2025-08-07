@@ -221,7 +221,7 @@ class RAGEvaluator:
             "by_question": metrics_df.to_dict(orient="records"),
         }
 
-    def save_reports(self, metrics, prefix="evaluation"):
+    def save_reports(self, metrics, prefix="BASELINE_eval"):
         """Save all reports to metrics directory"""
         if metrics is None or metrics["num_queries"] == 0:
             print("No metrics to save")
@@ -236,7 +236,7 @@ class RAGEvaluator:
             return o
 
         # Save aggregate metrics
-        metrics_file = os.path.join(METRICS_DIR, f"{prefix}_metrics_single_multi.json")
+        metrics_file = os.path.join(METRICS_DIR, f"{prefix}_single_multi.json")
         with open(metrics_file, "w", encoding="utf-8") as f:
             json.dump(
                 {k: convert(v) for k, v in metrics.items() if k != "by_question"},
@@ -313,7 +313,7 @@ def main(test_file, top_k=5):
     print(f"Avg Retrieval Time: {metrics['avg_retrieval_time']:.4f}s")
     print(f"Total Input Tokens: {metrics['total_input_tokens']}")
 
-    evaluator.save_reports(metrics, prefix="eval")
+    evaluator.save_reports(metrics, prefix="BASELINE_eval")
 
 
 if __name__ == "__main__":

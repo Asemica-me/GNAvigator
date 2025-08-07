@@ -7,3 +7,4 @@ __pycache__/
 .streamlit/secrets.toml
 config.ini
 .vscode/
+eval/data/

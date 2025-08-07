@@ -1,8 +1,0 @@
-{
-  "num_queries": 908,
-  "avg_precision@k": 0.1473568281938326,
-  "avg_recall@k": 0.5078010279001469,
-  "avg_mrr": 0.48217694566813507,
-  "avg_retrieval_time": 0.6421765538039187,
-  "total_input_tokens": 1816
-}

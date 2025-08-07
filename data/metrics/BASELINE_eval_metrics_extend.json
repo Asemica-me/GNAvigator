@@ -5,6 +5,6 @@
   "avg_mrr": 0.47043963254593174,
   "avg_ndcg@k": 0.521878974233035,
   "avg_ap@k": 0.6751968503937008,
-  "avg_retrieval_time": 0.6297321216327938,
+  "avg_retrieval_time": 0.13195047885414182,
   "total_input_tokens": 1016
 }
