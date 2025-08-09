@@ -155,7 +155,7 @@ class RAGEvaluator:
                 return float(o)
             return o
 
-        metrics_file = os.path.join(METRICS_DIR, f"{prefix}_metrics_extend.json")
+        metrics_file = os.path.join(METRICS_DIR, f"{prefix}_singlehop.json")
         with open(metrics_file, "w", encoding="utf-8") as f:
             json.dump(
                 {k: convert(v) for k, v in metrics.items() if k != "by_question"},
@@ -163,7 +163,7 @@ class RAGEvaluator:
                 indent=2,
                 ensure_ascii=False,
             )
-        # details_file = os.path.join(METRICS_DIR, f"{prefix}_details_extend.csv")
+        # details_file = os.path.join(METRICS_DIR, f"{prefix}_details_by_query.csv")
         # df = pd.DataFrame(metrics["by_question"])
         # df.to_csv(details_file, index=False)
 

@@ -1,0 +1,47 @@
+{
+  "metadata": {
+    "timestamp_utc": "2025-08-08T22:01:52Z",
+    "batch_size_eval": 32,
+    "experiment_prefix": "HYBRID_eval",
+    "retrieval_top_k": 5,
+    "candidate_k": 50,
+    "hybrid": {
+      "type": "hybrid",
+      "rrf_k": 60,
+      "dense_weight": null,
+      "sparse_weight": null,
+      "dense": {
+        "type": "dense",
+        "device": "cpu"
+      },
+      "bm25": {
+        "type": "bm25",
+        "use_stopwords": true,
+        "use_stemming": true,
+        "k1": 1.5,
+        "b": 0.75,
+        "corpus": {
+          "num_chunks": 801,
+          "min_len": 4,
+          "max_len": 2687,
+          "avg_len": 91.82521847690387
+        }
+      }
+    },
+    "dataset": "combined",
+    "combined_sources": [
+      "singlehop",
+      "multihop"
+    ],
+    "shuffle": true
+  },
+  "metrics": {
+    "num_queries": 908,
+    "avg_precision@k": 0.155726872246696,
+    "avg_recall@k": 0.5335903083700441,
+    "avg_mrr": 0.5084067547723935,
+    "avg_ndcg@k": 0.5648140431858157,
+    "avg_ap@k": 0.36693281938325994,
+    "avg_retrieval_time": 0.45620562907540146
+  }
+}

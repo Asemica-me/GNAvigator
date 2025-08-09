@@ -236,7 +236,7 @@ class RAGEvaluator:
             return o
 
         # Save aggregate metrics
-        metrics_file = os.path.join(METRICS_DIR, f"{prefix}_single_multi.json")
+        metrics_file = os.path.join(METRICS_DIR, f"{prefix}_combined.json")
         with open(metrics_file, "w", encoding="utf-8") as f:
             json.dump(
                 {k: convert(v) for k, v in metrics.items() if k != "by_question"},
@@ -246,7 +246,7 @@ class RAGEvaluator:
             )
 
         # Save detailed results as CSV
-        # details_file = os.path.join(METRICS_DIR, f"{prefix}_details.csv")
+        # details_file = os.path.join(METRICS_DIR, f"{prefix}_details_by_query.csv")
         # df = pd.DataFrame(metrics["by_question"])
         # df.to_csv(details_file, index=False)
 

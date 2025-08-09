@@ -21,7 +21,6 @@ import inspect
 
 from typing import List, Dict, Tuple, Union, Optional, Any, Set
 from functools import lru_cache
-from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
 
 from dotenv import load_dotenv
@@ -35,7 +34,6 @@ from transformers import (
 )
 from sentence_transformers import SentenceTransformer
 from keybert import KeyBERT
-from peft import PeftModel, PeftConfig
 
 from vector_store import VectorDatabaseManager
 
@@ -48,12 +46,12 @@ nltk.download("punkt", quiet=True)
 nltk.download("stopwords", quiet=True)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-os.chdir(PROJECT_ROOT) 
+os.chdir(PROJECT_ROOT)
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 DATA_DIR = PROJECT_ROOT / "data"
 METRICS_DIR = DATA_DIR / "metrics"
-ABLATION_METRICS_DIR = METRICS_DIR / "ablation_metrics"
+ABLATION_METRICS_DIR = METRICS_DIR / "ablation_metrics_alpha_hybrid"
 ABLATION_METRICS_DIR.mkdir(parents=True, exist_ok=True)
 
 # -------------------------------
@@ -71,7 +69,7 @@ def _safe_len(arr) -> int:
 
 
 # ===============================
-# Vector wrapper + retrievers
+# Vector wrapper
 # ===============================
 class VectorDatabaseWrapper:
     def __init__(self, vector_db: VectorDatabaseManager):
@@ -98,45 +96,13 @@ class VectorDatabaseWrapper:
         self._cached_embeddings[qh] = results
         return results
 
-    def query_batch(self, questions: List[str], top_k: int = 5) -> List[List[Dict[str, Any]]]:
-        out = []
-        for q in questions:
-            out.append(self.query(q, top_k))
-        return out
-
     def get_document_ids(self) -> List[str]:
         return [m.get("id") for m in self.metadata_db if m.get("id") is not None]
 
 
-class DenseRetriever:
-    def __init__(self, device: Optional[str] = None):
-        self.vector_db = VectorDatabaseWrapper(VectorDatabaseManager(device=device))
-
-    def _format_results(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        formatted: List[Dict[str, Any]] = []
-        for item in results or []:
-            _id = item.get("id")
-            if _id is None:
-                continue
-            formatted.append({
-                "id": _id,
-                "chunk_id": _id,
-                "score": float(item.get("score", 0.0)),
-                **item
-            })
-        return formatted
-
-    def retrieve(self, question: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        return self._format_results(self.vector_db.query(question, top_k))
-
-    def query_with_scores(self, question: str, top_k: int = 20) -> List[Dict[str, Any]]:
-        return self._format_results(self.vector_db.query(question, top_k))
-
-    def batch_query_with_scores(self, questions: List[str], top_k: int = 20) -> List[List[Dict[str, Any]]]:
-        batch = self.vector_db.query_batch(questions, top_k)
-        return [self._format_results(r) for r in batch]
-
-
+# ===============================
+# BM25
+# ===============================
 class BM25Retriever:
     def __init__(self, use_stopwords=True, use_stemming=True, k1=1.5, b=0.75):
         """
@@ -175,7 +141,6 @@ class BM25Retriever:
 
         # Build index
         self.tokenized_chunks = [self._preprocess(chunk) for chunk in self.chunks]
-        # Safe: tokenized_chunks has same length as chunks, so non-empty
         self.bm25 = BM25Okapi(self.tokenized_chunks, k1=self.k1, b=self.b)
 
     def _concat_fields(self, meta: Dict[str, Any]) -> str:
@@ -206,7 +171,6 @@ class BM25Retriever:
         return self._preprocess(query or "")
 
     def retrieve(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
-        # No-op if corpus is empty / index not built
         if not self.bm25 or not self.tokenized_chunks:
             return []
         tokenized_query = self._preprocess_query(query)
@@ -227,99 +191,25 @@ class BM25Retriever:
             })
         return results
 
-    def batch_retrieve(self, queries: List[str], k: int = 5) -> List[List[Dict[str, Any]]]:
-        if not self.bm25 or not self.tokenized_chunks:
-            return [[] for _ in queries]
-        out = []
-        for q in queries:
-            out.append(self.retrieve(q, k))
-        return out
-
     def query_with_scores(self, question: str, top_k: int = 20) -> List[Dict[str, Any]]:
         return self.retrieve(question, k=top_k)
 
-    def batch_query_with_scores(self, questions: List[str], top_k: int = 20) -> List[List[Dict[str, Any]]]:
-        return self.batch_retrieve(questions, k=top_k)
-
-
-class HybridRetriever:
-    def __init__(self, rrf_k: int = 60, dense_weight: float = 1.0, sparse_weight: float = 1.0, device: Optional[str] = None):
-        self.dense = DenseRetriever(device=device)
-        self.bm25 = BM25Retriever()
-        self.rrf_k = rrf_k
-        self.dense_weight = dense_weight
-        self.sparse_weight = sparse_weight
-        self._validate_retriever_consistency()
-
-    def _validate_retriever_consistency(self):
-        try:
-            dense_ids = set(self.dense.vector_db.get_document_ids())
-            bm25_ids = set(self.bm25.vector_db.get_document_ids())
-            if dense_ids != bm25_ids:
-                logger.warning(
-                    "Doc ID mismatch: %d in BM25 not in Dense, %d in Dense not in BM25",
-                    len(bm25_ids - dense_ids),
-                    len(dense_ids - bm25_ids),
-                )
-        except Exception:
-            pass
-
-    def _standardize(self, results: List[Dict[str, Any]], tag: str) -> Dict[str, Dict[str, Any]]:
-        std = {}
-        for rnk, doc in enumerate(results, 1):
-            did = doc.get("id", str(doc.get("text", ""))[:128])
-            std[did] = {
-                "id": did,
-                "text": doc.get("text", doc.get("content", "")),
-                "score": float(doc.get("score", 0.0)),
-                "retriever": tag,
-                "rank": rnk,
-                **doc,  # keep original metadata
-            }
-        return std
-
-    def _fuse(self, dense_std: Dict[str, Dict[str, Any]], sparse_std: Dict[str, Dict[str, Any]], top_k: int) -> List[Dict[str, Any]]:
-        all_ids = set(dense_std) | set(sparse_std)
-        fused = []
-        for did in all_ids:
-            dr = dense_std.get(did, {}).get("rank", math.inf)
-            sr = sparse_std.get(did, {}).get("rank", math.inf)
-            score = 0.0
-            if dr != math.inf:
-                score += self.dense_weight / (self.rrf_k + dr)
-            if sr != math.inf:
-                score += self.sparse_weight / (self.rrf_k + sr)
-            fused.append((score, dense_std.get(did) or sparse_std.get(did)))
-        fused.sort(key=lambda x: x[0], reverse=True)
-        return [doc for _, doc in fused[:top_k]]
-
-    def retrieve(self, question: str, top_k: int = 5, candidate_k: int = 50) -> List[Dict[str, Any]]:
-        d = self.dense.query_with_scores(question, top_k=candidate_k)
-        s = self.bm25.query_with_scores(question, top_k=candidate_k)
-        return self._fuse(self._standardize(d, "dense"), self._standardize(s, "sparse"), top_k)
-
-    def batch_retrieve(self, questions: List[str], top_k: int = 5, candidate_k: int = 50) -> List[List[Dict[str, Any]]]:
-        out = []
-        for q in questions:
-            out.append(self.retrieve(q, top_k=top_k, candidate_k=candidate_k))
-        return out
-
 
 # ===============================
-# Rerank retriever
+# Reranker (cross-encoder over BM25 results)
 # ===============================
 class RerankRetriever:
     def __init__(
         self,
         base_retriever=None,
-        reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-2-v2",
+        reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2",
         device: Optional[str] = None,
         max_length: int = 256,
         batch_size: int = 64,
         cache_size: int = 5000,
         max_rerank_candidates: int = 20,
     ):
-        self.base = base_retriever if base_retriever else DenseRetriever(device=device)
+        self.base = base_retriever if base_retriever else BM25Retriever()
         self.max_rerank_candidates = max_rerank_candidates
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.reranker_name = reranker_model
@@ -374,18 +264,38 @@ class RerankRetriever:
         return [candidates[i] for i in order[:top_k]]
 
     def retrieve(self, question: str, top_k: int = 5, candidates_k: int = 50, **kwargs) -> List[Dict[str, Any]]:
-        # be compatible with Hybrid (candidate_k) and others (top_k only)
+        """
+        Normalize args to whatever the base retriever expects.
+        Supports BM25 (k=...), Dense/Hybrid (top_k / candidate_k), etc.
+        """
         try:
-            cands = self.base.retrieve(question, top_k=candidates_k, candidate_k=candidates_k)
+            sig = inspect.signature(self.base.retrieve)
+        except (ValueError, TypeError):
+            sig = None
+
+        base_kwargs = {}
+        if sig:
+            if "top_k" in sig.parameters:
+                base_kwargs["top_k"] = candidates_k
+            elif "k" in sig.parameters:
+                base_kwargs["k"] = candidates_k
+            if "candidates_k" in sig.parameters:
+                base_kwargs["candidates_k"] = candidates_k
+            elif "candidate_k" in sig.parameters:
+                base_kwargs["candidate_k"] = candidates_k
+
+        try:
+            cands = self.base.retrieve(question, **base_kwargs)
         except TypeError:
-            cands = self.base.retrieve(question, top_k=candidates_k)
+            try:
+                cands = self.base.retrieve(question, candidates_k)
+            except Exception:
+                cands = self.base.retrieve(question)
+
         return self.rerank(question, cands, top_k)
 
     def batch_retrieve(self, questions: List[str], top_k: int = 5, candidates_k: int = 50, **kwargs) -> List[List[Dict[str, Any]]]:
-        out = []
-        for q in questions:
-            out.append(self.retrieve(q, top_k=top_k, candidates_k=candidates_k))
-        return out
+        return [self.retrieve(q, top_k=top_k, candidates_k=candidates_k) for q in questions]
 
 
 # ===============================
@@ -516,7 +426,6 @@ class QueryRewriteRetriever:
 
     def _embed_text(self, texts: List[str]) -> np.ndarray:
         if not (self.qr.embed_model and self.qr.embed_tokenizer):
-            # fallback: bag-of-words-ish hashing
             arr = []
             for t in texts:
                 h = hashlib.md5(t.encode()).digest()
@@ -528,14 +437,9 @@ class QueryRewriteRetriever:
         return out
 
     def _get_synonyms(self, word: str) -> List[str]:
-        # Extremely conservative: find nearest tokens in a small vocabulary (if embeddings exist)
         if not (self.qr.embed_model and self.qr.embed_tokenizer):
             return []
-        vocab = [word]  # pull from a real lexicon
-        emb = self._embed_text([word])[0]
-        vemb = self._embed_text(vocab)
-        sims = vemb @ emb / (np.linalg.norm(vemb, axis=1) * np.linalg.norm(emb) + 1e-9)
-        # only return if something else exists (here, nothing). Keep stubbed for structure.
+        # Placeholder for a real synonym lookup
         return []
 
     def keyword_expansion(self, question: str) -> List[str]:
@@ -559,7 +463,6 @@ class QueryRewriteRetriever:
             return question
         try:
             doc = self.qr.nlp(question)
-            # light normalization: lemmatize non-stop tokens
             toks = [t.lemma_ for t in doc if not t.is_stop and not t.is_punct]
             return " ".join(toks) or question
         except Exception:
@@ -610,7 +513,6 @@ class QueryRewriteRetriever:
         if self.qr.nlp:
             doc = self.qr.nlp(text.lower())
             return [t.lemma_ for t in doc if (not t.is_stop and not t.is_punct and len(t.text) > 1)]
-        # fallback
         text = re.sub(r"[^\w\s]", " ", text.lower())
         toks = text.split()
         stops = set(nltk.corpus.stopwords.words("italian"))
@@ -620,7 +522,7 @@ class QueryRewriteRetriever:
         if not (self.enable_prf and self._bm25_for_prf):
             return question
         try:
-            # get initial docs
+            # initial docs
             try:
                 docs = self._call_base_retrieve(question, n=5)
             except Exception:
@@ -632,7 +534,6 @@ class QueryRewriteRetriever:
                 for term in self._bm25_prep(t):
                     if term not in q_toks:
                         terms.append(term)
-            # simple count
             freq = defaultdict(int)
             for t in terms:
                 freq[t] += 1
@@ -665,7 +566,6 @@ class QueryRewriteRetriever:
         if strategy == "hybrid":
             rewrites.append(f"{self.core_content_extraction(question)} {self.keyword_rewriting(question)}")
 
-        # dedupe while preserving order
         seen, out = set(), []
         for q in rewrites:
             qn = (q or "").strip()
@@ -694,7 +594,6 @@ class QueryRewriteRetriever:
                 kwargs["candidate_k"] = candidates_k
         return self.base.retrieve(query, **kwargs)
 
-    # public API
     def retrieve(self, question: str, top_k: int = 5, strategy: str = "all", fusion_method: str = "rrf", **kwargs) -> List[Dict[str, Any]]:
         candidates_k = kwargs.pop("candidates_k", None)
         q_list = self.generate_rewrites(question, strategy=strategy)
@@ -716,7 +615,6 @@ class QueryRewriteRetriever:
     def _fuse(self, results: List[Dict[str, Any]], top_k: int, method: str = "rrf") -> List[Dict[str, Any]]:
         if not results:
             return []
-        # group by id
         bucket: Dict[str, Dict[str, Any]] = {}
         for d in results:
             did = d.get("id") or d.get("chunk_id") or hashlib.md5((d.get("text", "")[:200]).encode()).hexdigest()
@@ -857,37 +755,6 @@ class RetrieverEvaluator:
 # Metadata descriptors
 # ===============================
 def _describe_base_retriever(base) -> Dict[str, Any]:
-    # Hybrid
-    if hasattr(base, "bm25") and hasattr(base, "dense"):
-        info = {
-            "type": "hybrid",
-            "hybrid": {"rrf_k": getattr(base, "rrf_k", None), "dense_weight": base.dense_weight, "sparse_weight": base.sparse_weight},
-        }
-        # dense
-        dev = os.getenv("DEVICE", "cpu")
-        try:
-            mgr = base.dense.vector_db.vector_db
-            if hasattr(mgr, "device") and mgr.device:
-                dev = mgr.device
-        except Exception:
-            pass
-        info["dense"] = {"impl": "DenseRetriever", "device": dev}
-        # bm25
-        bm = base.bm25
-        lengths = [len(c.split()) for c in getattr(bm, "chunks", [])] if getattr(bm, "chunks", None) else []
-        info["bm25"] = {
-            "use_stopwords": bm.use_stopwords,
-            "use_stemming": bm.use_stemming,
-            "k1": bm.k1,
-            "b": bm.b,
-            "corpus": {
-                "num_chunks": len(getattr(bm, "chunks", [])),
-                "min_len": int(min(lengths)) if lengths else 0,
-                "max_len": int(max(lengths)) if lengths else 0,
-                "avg_len": float(np.mean(lengths)) if lengths else 0.0,
-            },
-        }
-        return info
     # BM25
     if base.__class__.__name__ == "BM25Retriever":
         lengths = [len(c.split()) for c in getattr(base, "chunks", [])] if getattr(base, "chunks", None) else []
@@ -906,15 +773,27 @@ def _describe_base_retriever(base) -> Dict[str, Any]:
                 },
             },
         }
-    # Dense
-    dev = os.getenv("DEVICE", "cpu")
-    try:
-        mgr = base.vector_db.vector_db
-        if hasattr(mgr, "device") and mgr.device:
-            dev = mgr.device
-    except Exception:
-        pass
-    return {"type": "dense", "dense": {"impl": "DenseRetriever", "device": dev}}
+    # Rerank(BM25)
+    if isinstance(base, RerankRetriever) and isinstance(base.base, BM25Retriever):
+        bm = base.base
+        lengths = [len(c.split()) for c in getattr(bm, "chunks", [])] if getattr(bm, "chunks", None) else []
+        return {
+            "type": "rerank_bm25",
+            "bm25": {
+                "use_stopwords": bm.use_stopwords,
+                "use_stemming": bm.use_stemming,
+                "k1": bm.k1,
+                "b": bm.b,
+                "corpus": {
+                    "num_chunks": len(getattr(bm, "chunks", [])),
+                    "min_len": int(min(lengths)) if lengths else 0,
+                    "max_len": int(max(lengths)) if lengths else 0,
+                    "avg_len": float(np.mean(lengths)) if lengths else 0.0,
+                },
+            },
+            "reranker": _describe_reranker(base),
+        }
+    return {"type": "unknown"}
 
 def _describe_reranker(rerank: Optional[RerankRetriever]) -> Optional[Dict[str, Any]]:
     if rerank is None:
@@ -958,81 +837,68 @@ def load_and_shuffle_datasets(singlehop_path: Path, multihop_path: Path) -> List
 
 
 # ===============================
-# Runner: QueryRewrite vs base
+# Runner: ONLY QueryRewrite over Rerank(BM25)
 # ===============================
-def run_query_rewrite_vs_base_retrievers(top_k: int = 5, candidate_k: int = 50):
-    ce_model = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+def run_rerank_bm25_only(top_k: int = 5, candidate_k: int = 50):
+    ce_model = os.getenv("CE_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
 
-    dense = DenseRetriever(device="cpu")
     bm25 = BM25Retriever()
-    hybrid = HybridRetriever(rrf_k=60, dense_weight=1.0, sparse_weight=1.0, device="cpu")
+    rerank_bm25 = RerankRetriever(base_retriever=bm25, reranker_model=ce_model, device="cpu")
 
-    retriever_configs = [
-        ("dense", dense),
-        ("bm25", bm25),
-        ("hybrid", hybrid),
-        ("rerank_dense", RerankRetriever(base_retriever=dense, reranker_model=ce_model, device="cpu")),
-        ("rerank_bm25", RerankRetriever(base_retriever=bm25, reranker_model=ce_model, device="cpu")),
-        ("rerank_hybrid", RerankRetriever(base_retriever=hybrid, reranker_model=ce_model, device="cpu")),
-    ]
+    qrr = QueryRewriteRetriever(
+        base_retriever=rerank_bm25,
+        device="cpu",
+        expansion_terms=3,
+        lang="italian",
+        enable_cce=True,
+        enable_kwr=True,
+        enable_gqr=True,
+        enable_prf=True,
+        enable_decompose=True,
+    )
+    evaluator = RetrieverEvaluator(qrr, batch_size=32, candidate_k=candidate_k)
 
     SINGLEHOP_FILE = DATA_DIR / "test" / "test_dataset_singlehop.json"
     MULTIHOP_FILE = DATA_DIR / "test" / "test_dataset_multihop.json"
 
+    common_meta = {
+        "experiment_prefix": "QUERY-REWRITE_rerank_bm25",
+        "retrieval_top_k": top_k,
+        "candidate_k": candidate_k,
+        "query_rewriter": _describe_query_rewriter(qrr),
+    }
+
+    # SINGLEHOP
+    print("\n--- SINGLEHOP (rerank_bm25) ---")
+    single = evaluator.evaluate_retrieval(SINGLEHOP_FILE, top_k)
+    if single and single["num_queries"] > 0:
+        evaluator.save_reports(single, prefix="QUERY-REWRITE_rerank_bm25_singlehop", metadata={**common_meta, "dataset": "singlehop"})
+        print("Saved singlehop.")
+
+    # COMBINED (single + multihop)
+    print("\n--- SINGLE+MULTIHOP (rerank_bm25) ---")
+    combined = load_and_shuffle_datasets(SINGLEHOP_FILE, MULTIHOP_FILE)
+    tmp = DATA_DIR / "test" / "test_dataset_combined_temp.json"
     try:
-        for name, base in retriever_configs:
-            print(f"\n=== QUERY REWRITE RETRIEVER ({name.upper()}) ===")
-            qrr = QueryRewriteRetriever(
-                base_retriever=base,
-                device="cpu",
-                expansion_terms=3,
-                lang="italian",
-                enable_cce=True,
-                enable_kwr=True,
-                enable_gqr=True,
-                enable_prf=True,
-                enable_decompose=True,
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(combined, f, ensure_ascii=False, indent=2)
+        allm = evaluator.evaluate_retrieval(tmp, top_k)
+        if allm and allm["num_queries"] > 0:
+            evaluator.save_reports(
+                allm,
+                prefix="QUERY-REWRITE_rerank_bm25_combined",
+                metadata={**common_meta, "dataset": "combined", "combined_sources": ["singlehop", "multihop"], "shuffle": True},
             )
-            evaluator = RetrieverEvaluator(qrr, batch_size=32, candidate_k=candidate_k)
-
-            common_meta = {
-                "experiment_prefix": f"QUERY-REWRITE_{name}",
-                "retrieval_top_k": top_k,
-                "candidate_k": candidate_k,
-                "query_rewriter": _describe_query_rewriter(qrr),
-            }
-
-            # SINGLEHOP
-            print(f"\n--- SINGLEHOP ({name}) ---")
-            single = evaluator.evaluate_retrieval(SINGLEHOP_FILE, top_k)
-            if single and single["num_queries"] > 0:
-                evaluator.save_reports(single, prefix=f"QUERY-REWRITE_{name}_singlehop", metadata={**common_meta, "dataset": "singlehop"})
-                print("Saved singlehop.")
-
-            # COMBINED
-            print(f"\n--- SINGLE+MULTIHOP ({name}) ---")
-            combined = load_and_shuffle_datasets(SINGLEHOP_FILE, MULTIHOP_FILE)
-            tmp = DATA_DIR / "test" / "test_dataset_combined_temp.json"
-            try:
-                with open(tmp, "w", encoding="utf-8") as f:
-                    json.dump(combined, f, ensure_ascii=False, indent=2)
-                allm = evaluator.evaluate_retrieval(tmp, top_k)
-                if allm and allm["num_queries"] > 0:
-                    evaluator.save_reports(
-                        allm,
-                        prefix=f"QUERY-REWRITE_{name}_combined",
-                        metadata={**common_meta, "dataset": "combined", "combined_sources": ["singlehop", "multihop"], "shuffle": True},
-                    )
-                    print("Saved combined.")
-            finally:
-                try:
-                    tmp.unlink(missing_ok=True)
-                except Exception:
-                    pass
+            print("Saved combined.")
     finally:
-        torch.cuda.empty_cache()
-        gc.collect()
+        try:
+            tmp.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    torch.cuda.empty_cache()
+    gc.collect()
 
 
 if __name__ == "__main__":
-    run_query_rewrite_vs_base_retrievers(top_k=5, candidate_k=50)
+    run_rerank_bm25_only(top_k=5, candidate_k=50)

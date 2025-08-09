@@ -1,0 +1,57 @@
+{
+  "metadata": {
+    "timestamp_utc": "2025-08-08T17:46:13Z",
+    "batch_size_eval": 32,
+    "candidate_k_eval": 50,
+    "experiment_prefix": "QUERY-REWRITE_hybrid",
+    "retrieval_top_k": 5,
+    "candidate_k": 50,
+    "query_rewriter": {
+      "strategy_flags": {
+        "enable_cce": true,
+        "enable_kwr": true,
+        "enable_gqr": true,
+        "enable_prf": false,
+        "enable_decompose": true
+      },
+      "expansion_terms": 3,
+      "lang": "italian",
+      "device": "cpu",
+      "base_retriever": {
+        "type": "hybrid",
+        "hybrid": {
+          "rrf_k": 60,
+          "dense_weight": 1.0,
+          "sparse_weight": 1.0
+        },
+        "dense": {
+          "impl": "DenseRetriever",
+          "device": "cpu"
+        },
+        "bm25": {
+          "use_stopwords": true,
+          "use_stemming": true,
+          "k1": 1.5,
+          "b": 0.75,
+          "corpus": {
+            "num_chunks": 801,
+            "min_len": 4,
+            "max_len": 2687,
+            "avg_len": 91.82521847690387
+          }
+        }
+      },
+      "reranker": null
+    },
+    "dataset": "singlehop"
+  },
+  "metrics": {
+    "num_queries": 508,
+    "avg_precision@k": 0.11496062992125983,
+    "avg_recall@k": 0.5748031496062992,
+    "avg_mrr": 0.37486876640419947,
+    "avg_ndcg@k": 0.4248858773112915,
+    "avg_ap@k": 0.37486876640419947,
+    "avg_retrieval_time": 4.382806356889049
+  }
+}

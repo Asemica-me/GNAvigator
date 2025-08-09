@@ -1,0 +1,46 @@
+{
+  "metadata": {
+    "timestamp_utc": "2025-08-08T19:15:44Z",
+    "batch_size_eval": 32,
+    "candidate_k_eval": 50,
+    "experiment_prefix": "QUERY-REWRITE_rerank_dense",
+    "retrieval_top_k": 5,
+    "candidate_k": 50,
+    "query_rewriter": {
+      "strategy_flags": {
+        "enable_cce": true,
+        "enable_kwr": true,
+        "enable_gqr": true,
+        "enable_prf": false,
+        "enable_decompose": true
+      },
+      "expansion_terms": 3,
+      "lang": "italian",
+      "device": "cpu",
+      "base_retriever": {
+        "type": "dense",
+        "dense": {
+          "impl": "DenseRetriever",
+          "device": "cpu"
+        }
+      },
+      "reranker": {
+        "reranker_model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+        "device": "cpu",
+        "max_length": 256,
+        "batch_size": 64,
+        "max_rerank_candidates": 20
+      }
+    },
+    "dataset": "singlehop"
+  },
+  "metrics": {
+    "num_queries": 508,
+    "avg_precision@k": 0.10511811023622046,
+    "avg_recall@k": 0.5255905511811023,
+    "avg_mrr": 0.3166994750656168,
+    "avg_ndcg@k": 0.3687693370928463,
+    "avg_ap@k": 0.3166994750656168,
+    "avg_retrieval_time": 4.768047692715722
+  }
+}

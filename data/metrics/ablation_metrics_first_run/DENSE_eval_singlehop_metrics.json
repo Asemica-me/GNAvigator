@@ -1,0 +1,22 @@
+{
+  "metadata": {
+    "timestamp_utc": "2025-08-08T13:55:13Z",
+    "batch_size_eval": 32,
+    "experiment_prefix": "dense_eval",
+    "retrieval_top_k": 5,
+    "retriever": {
+      "type": "dense",
+      "device": "cpu"
+    },
+    "dataset": "singlehop"
+  },
+  "metrics": {
+    "num_queries": 508,
+    "avg_precision@k": 0.13503937007874015,
+    "avg_recall@k": 0.6751968503937008,
+    "avg_mrr": 0.47043963254593174,
+    "avg_ndcg@k": 0.5218789742330351,
+    "avg_ap@k": 0.47043963254593174,
+    "avg_retrieval_time": 0.29731250925202246
+  }
+}

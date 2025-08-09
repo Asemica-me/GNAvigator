@@ -1,0 +1,36 @@
+{
+  "metadata": {
+    "timestamp_utc": "2025-08-08T14:08:31Z",
+    "batch_size_eval": 32,
+    "experiment_prefix": "BM25_eval",
+    "retrieval_top_k": 5,
+    "bm25": {
+      "type": "bm25",
+      "use_stopwords": true,
+      "use_stemming": true,
+      "k1": 1.5,
+      "b": 0.75,
+      "corpus": {
+        "num_chunks": 801,
+        "min_len": 4,
+        "max_len": 2687,
+        "avg_len": 91.82521847690387
+      }
+    },
+    "dataset": "combined",
+    "combined_sources": [
+      "singlehop",
+      "multihop"
+    ],
+    "shuffle": true
+  },
+  "metrics": {
+    "num_queries": 908,
+    "avg_precision@k": 0.1656387665198238,
+    "avg_recall@k": 0.5309287812041116,
+    "avg_mrr": 0.5123898678414097,
+    "avg_ndcg@k": 0.5713438955167932,
+    "avg_ap@k": 0.35503089818893785,
+    "avg_retrieval_time": 0.00175974030834356
+  }
+}

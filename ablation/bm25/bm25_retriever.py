@@ -10,11 +10,14 @@ import sys
 import json
 import random
 from pathlib import Path
-from typing import List, Dict, Set, Any
+from typing import List, Dict, Set, Any, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from vector_store import VectorDatabaseManager
 from dotenv import load_dotenv
+
+import pandas as pd
+from datetime import datetime
 
 load_dotenv()
 
@@ -24,6 +27,36 @@ logger = logging.getLogger(__name__)
 nltk.download('punkt', quiet=True)
 nltk.download('stopwords', quiet=True)
 
+# -------------------------------
+# Paths
+# -------------------------------
+current_dir = Path(__file__).resolve().parent
+root_dir = current_dir.parent.parent  # ablation/
+DATA_DIR = root_dir / "data"
+METRICS_DIR = DATA_DIR / "metrics"
+ABLATION_METRICS_DIR = METRICS_DIR / "ablation_metrics"
+METRICS_DIR.mkdir(parents=True, exist_ok=True)
+ABLATION_METRICS_DIR.mkdir(parents=True, exist_ok=True)
+
+# -------------------------------
+# Helpers (metadata)
+# -------------------------------
+def _now_iso() -> str:
+    return datetime.utcnow().isoformat(timespec="seconds") + "Z"
+
+def _describe_bm25(bm: "BM25Retriever") -> Dict[str, Any]:
+    return {
+        "type": "bm25",
+        "use_stopwords": getattr(bm, "use_stopwords", None),
+        "use_stemming": getattr(bm, "use_stemming", None),
+        "k1": getattr(bm, "k1", None),
+        "b": getattr(bm, "b", None),
+        "corpus": getattr(bm, "corpus_stats", None),
+    }
+
+# -------------------------------
+# Vector wrapper
+# -------------------------------
 class VectorDatabaseWrapper:
     def __init__(self, vector_db: VectorDatabaseManager):
         self.vector_db = vector_db
@@ -35,12 +68,14 @@ class VectorDatabaseWrapper:
         # Check cache first
         if question in self._cached_embeddings:
             return self._cached_embeddings[question]
-        
         # Query database and cache results
         results = self.vector_db.query(question, top_k) or []
         self._cached_embeddings[question] = results
         return results
 
+# -------------------------------
+# BM25 retriever
+# -------------------------------
 class BM25Retriever:
     def __init__(self, use_stopwords=True, use_stemming=True, k1=1.5, b=0.75):
         """
@@ -57,16 +92,31 @@ class BM25Retriever:
         self.use_stemming = use_stemming
         self.k1 = k1
         self.b = b
-        
-        # Log corpus statistics
-        chunk_lengths = [len(c.split()) for c in self.chunks]
-        logger.info(f"Loaded {len(self.chunks)} chunks")
-        logger.info(f"Chunk length: min={min(chunk_lengths)}, max={max(chunk_lengths)}, avg={np.mean(chunk_lengths):.1f} words")
-        
+
+        # Log + store corpus statistics
+        if self.chunks:
+            chunk_lengths = [len(c.split()) for c in self.chunks]
+            self.corpus_stats = {
+                "num_chunks": len(self.chunks),
+                "min_len": int(min(chunk_lengths)),
+                "max_len": int(max(chunk_lengths)),
+                "avg_len": float(np.mean(chunk_lengths)),
+            }
+            logger.info(
+                "Loaded %d chunks | len min=%d max=%d avg=%.1f words",
+                self.corpus_stats["num_chunks"],
+                self.corpus_stats["min_len"],
+                self.corpus_stats["max_len"],
+                self.corpus_stats["avg_len"],
+            )
+        else:
+            self.corpus_stats = {"num_chunks": 0, "min_len": 0, "max_len": 0, "avg_len": 0.0}
+            logger.warning("Loaded 0 chunks — check metadata_db.")
+
         # Initialize Italian linguistic resources
         self.stop_words = set(nltk.corpus.stopwords.words('italian')) if use_stopwords else set()
         self.stemmer = nltk.stem.SnowballStemmer("italian") if use_stemming else None
-        
+
         # Preprocess chunks
         self.tokenized_chunks = [self._preprocess(chunk) for chunk in self.chunks]
         self.bm25 = BM25Okapi(
@@ -93,10 +143,10 @@ class BM25Retriever:
         text = re.sub(r"[^\w\s']", "", text)
         text = re.sub(r"\b(l'|un'|all'|d'|dell'|quest'|nell')\b", "", text)
         text = text.lower()
-        
+
         tokens = nltk.word_tokenize(text, language='italian')
         processed = []
-        
+
         for token in tokens:
             if len(token) < 2:
                 continue
@@ -143,24 +193,14 @@ class BM25Retriever:
                 batch_result.append(result)
             results.append(batch_result)
         return results
-    
+
     def query_with_scores(self, question: str, top_k: int = 20) -> List[Dict[str, Any]]:
         return self.retrieve(question, k=top_k)
-    
+
     def batch_query_with_scores(self, questions: List[str], top_k: int = 20) -> List[List[Dict[str, Any]]]:
         return self.batch_retrieve(questions, k=top_k)
 
 # === EVALUATION LOGIC  ===
-
-import pandas as pd
-
-current_dir = Path(__file__).resolve().parent
-root_dir = current_dir.parent.parent  # ablation/
-DATA_DIR = root_dir / "data"
-METRICS_DIR = DATA_DIR / "metrics"
-ABLATION_METRICS_DIR = METRICS_DIR / "ablation_metrics"
-METRICS_DIR.mkdir(parents=True, exist_ok=True)
-ABLATION_METRICS_DIR.mkdir(parents=True, exist_ok=True)
 
 def compute_ndcg(relevant_ids: Set[str], retrieved_docs: List[Dict], k: int = 5) -> float:
     if k <= 0 or not retrieved_docs:
@@ -265,14 +305,27 @@ class RetrieverEvaluator:
             "avg_retrieval_time": float(df["retrieval_time"].mean())
         }
 
-    def save_reports(self, metrics: Dict[str, Any], prefix: str = "bm25_eval") -> None:
-        """Save only aggregated metrics to file"""
-        if not metrics or metrics["num_queries"] == 0:
+    def save_reports(self, metrics: Dict[str, Any], prefix: str, metadata: Optional[Dict[str, Any]] = None) -> None:
+        """Save aggregated metrics with rich metadata."""
+        if not metrics or metrics.get("num_queries", 0) == 0:
             print("No metrics to save")
             return
+
+        meta = {
+            "timestamp_utc": _now_iso(),
+            "batch_size_eval": self.batch_size,
+        }
+        if metadata:
+            meta.update(metadata)
+
+        payload = {
+            "metadata": meta,
+            "metrics": metrics
+        }
+
         metrics_file = ABLATION_METRICS_DIR / f"{prefix}_metrics.json"
         with open(metrics_file, "w", encoding="utf-8") as f:
-            json.dump(metrics, f, indent=2, ensure_ascii=False)
+            json.dump(payload, f, indent=2, ensure_ascii=False)
 
 def load_and_shuffle_datasets(singlehop_path, multihop_path):
     with open(singlehop_path, encoding="utf-8") as f1:
@@ -290,6 +343,13 @@ def main(top_k: int = 5):
     SINGLEHOP_FILE = DATA_DIR / "test" / "test_dataset_singlehop.json"
     MULTIHOP_FILE = DATA_DIR / "test" / "test_dataset_multihop.json"
 
+    # common run metadata
+    run_meta_common = {
+        "experiment_prefix": "BM25_eval",
+        "retrieval_top_k": top_k,
+        "bm25": _describe_bm25(retriever),
+    }
+
     print("\n=== Evaluating SINGLEHOP dataset ===")
     singlehop_metrics = evaluator.evaluate_retrieval(SINGLEHOP_FILE, top_k)
     if singlehop_metrics and singlehop_metrics["num_queries"] > 0:
@@ -299,8 +359,12 @@ def main(top_k: int = 5):
         print(f"Mean Reciprocal Rank: {singlehop_metrics['avg_mrr']:.4f}")
         print(f"Avg nDCG@{top_k}: {singlehop_metrics['avg_ndcg@k']:.4f}")
         print(f"Avg AP@{top_k}: {singlehop_metrics['avg_ap@k']:.4f}")
-        print(f"Avg Retrieval Time: {singlehop_metrics['avg_retrieval_time']:.6f}s") # retrieval time is only for the BM25 score computation per batch
-        evaluator.save_reports(singlehop_metrics, prefix="BM25_eval_singlehop")
+        print(f"Avg Retrieval Time: {singlehop_metrics['avg_retrieval_time']:.6f}s")
+        evaluator.save_reports(
+            singlehop_metrics,
+            prefix="BM25_eval_singlehop",
+            metadata={**run_meta_common, "dataset": "singlehop"}
+        )
         print(f"Reports saved to {ABLATION_METRICS_DIR}")
     else:
         print("Singlehop evaluation failed.")
@@ -308,9 +372,16 @@ def main(top_k: int = 5):
     print("\n=== Evaluating SINGLE+MULTIHOP dataset ===")
     combined_data = load_and_shuffle_datasets(SINGLEHOP_FILE, MULTIHOP_FILE)
     temp_combined_file = DATA_DIR / "test" / "test_dataset_combined_temp.json"
-    with open(temp_combined_file, "w", encoding="utf-8") as f:
-        json.dump(combined_data, f, ensure_ascii=False, indent=2)
-    all_metrics = evaluator.evaluate_retrieval(temp_combined_file, top_k)
+    try:
+        with open(temp_combined_file, "w", encoding="utf-8") as f:
+            json.dump(combined_data, f, ensure_ascii=False, indent=2)
+        all_metrics = evaluator.evaluate_retrieval(temp_combined_file, top_k)
+    finally:
+        try:
+            temp_combined_file.unlink(missing_ok=True)
+        except Exception as e:
+            logger.warning(f"Could not delete temporary file: {str(e)}")
+
     if all_metrics and all_metrics["num_queries"] > 0:
         print(f"Combined: Queries evaluated: {all_metrics['num_queries']}")
         print(f"Avg Precision@{top_k}: {all_metrics['avg_precision@k']:.4f}")
@@ -319,7 +390,11 @@ def main(top_k: int = 5):
         print(f"Avg nDCG@{top_k}: {all_metrics['avg_ndcg@k']:.4f}")
         print(f"Avg AP@{top_k}: {all_metrics['avg_ap@k']:.4f}")
         print(f"Avg Retrieval Time: {all_metrics['avg_retrieval_time']:.6f}s")
-        evaluator.save_reports(all_metrics, prefix="BM25_eval_all")
+        evaluator.save_reports(
+            all_metrics,
+            prefix="BM25_eval_combined",
+            metadata={**run_meta_common, "dataset": "combined", "combined_sources": ["singlehop", "multihop"], "shuffle": True}
+        )
         print(f"Reports saved to {ABLATION_METRICS_DIR}")
     else:
         print("Combined evaluation failed.")
