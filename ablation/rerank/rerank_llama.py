@@ -20,6 +20,10 @@ import random
 import pandas as pd
 from contextlib import nullcontext
 from datetime import datetime
+from peft import PeftModel, PeftConfig
+from packaging import version
+import transformers
+from huggingface_hub import login
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 os.chdir(PROJECT_ROOT)
@@ -45,6 +49,32 @@ nltk.download('stopwords', quiet=True)
 
 os.environ.setdefault("PROJECT_ROOT", str(PROJECT_ROOT))
 os.environ.setdefault("DATA_DIR", str(PROJECT_ROOT / "data"))
+
+from huggingface_hub import snapshot_download
+
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS", "1")
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1") 
+
+def prefetch_repo(repo_id: str):
+    tok = os.getenv("HF_TOKEN")
+    snapshot_download(
+        repo_id=repo_id,
+        token=tok,
+        resume_download=True,
+        local_dir_use_symlinks=False,
+        max_workers=4
+    )
+
+def _auth_kwargs(token: Optional[str]):
+    if not token:
+        return {}
+    return {"token": token} if version.parse(transformers.__version__) >= version.parse("4.37.0") \
+           else {"use_auth_token": token}
+
+# Prefetch only essential models
+prefetch_repo("meta-llama/Llama-2-7b-hf")
+prefetch_repo("castorini/rankllama-v1-7b-lora-passage")
 
 # -------------------------------
 # Time helper
@@ -220,14 +250,21 @@ class BM25Retriever:
         return self.batch_retrieve(questions, top_k=top_k)
 
 class HybridRetriever:
-    def __init__(self, rrf_k=60, dense_weight=1.0, sparse_weight=1.0, device=None):
-        self.dense = DenseRetriever(device=device)
+    def __init__(self, rrf_k=60, dense_weight=1.0, sparse_weight=1.0, device=None, alpha=0.3):
+        self.dense = DenseRetriever(device="cpu")  # Force CPU
         self.bm25 = BM25Retriever()
         self.rrf_k = rrf_k
-        self.dense_weight = dense_weight
-        self.sparse_weight = sparse_weight
+        self.alpha = alpha
         self._validate_retriever_consistency()
 
+    def _minmax_norm(self, scores: Dict[str, float]) -> Dict[str, float]:
+        if not scores:
+            return {}
+        vmin, vmax = min(scores.values()), max(scores.values())
+        if vmax == vmin:
+            return {k: 1.0 for k in scores}  # all equal → 1.0
+        return {k: (v - vmin) / (vmax - vmin) for k, v in scores.items()}
+        
     def _validate_retriever_consistency(self):
         dense_ids = set(self.dense.vector_db.get_document_ids())
         bm25_ids = set(self.bm25.vector_db.get_document_ids())
@@ -251,25 +288,31 @@ class HybridRetriever:
         return standardized
 
     def _fuse_results(self, dense_results: Dict[str, Dict], sparse_results: Dict[str, Dict], top_k: int) -> List[Dict]:
-        all_docs = set(dense_results.keys()) | set(sparse_results.keys())
-        fused_scores = []
-        for doc_id in all_docs:
-            dense_rank = dense_results.get(doc_id, {}).get('rank', float('inf'))
-            sparse_rank = sparse_results.get(doc_id, {}).get('rank', float('inf'))
-            rrf_dense = self.dense_weight / (self.rrf_k + dense_rank) if dense_rank != float('inf') else 0
-            rrf_sparse = self.sparse_weight / (self.rrf_k + sparse_rank) if sparse_rank != float('inf') else 0
-            rrf_score = rrf_dense + rrf_sparse
-            doc_source = dense_results.get(doc_id) or sparse_results.get(doc_id)
-            fused_scores.append((rrf_score, doc_source))
-        fused_scores.sort(key=lambda x: x[0], reverse=True)
-        return [doc for _, doc in fused_scores[:top_k]]
-
+        # collect raw scores per retriever
+        d_raw = {doc_id: d['score'] for doc_id, d in dense_results.items()}
+        s_raw = {doc_id: s['score'] for doc_id, s in sparse_results.items()}
+        # normalize within each list (per query)
+        d = self._minmax_norm(d_raw)
+        s = self._minmax_norm(s_raw)
+        # union of docs
+        all_ids = set(dense_results) | set(sparse_results)
+        fused = []
+        for doc_id in all_ids:
+            Sd = d.get(doc_id, 0.0)
+            Ss = s.get(doc_id, 0.0)
+            Sh = self.alpha * Ss + Sd  # Sh = α·Ss + Sd (Wang 2023 paper)
+            base = dense_results.get(doc_id) or sparse_results.get(doc_id)
+            fused.append((Sh, {**base, "hybrid_score": Sh}))
+        fused.sort(key=lambda x: x[0], reverse=True)
+        return [doc for _, doc in fused[:top_k]]
+    
     def retrieve(self, question: str, top_k: int = 5, candidate_k: int = 50) -> List[Dict]:
         dense_raw = self.dense.query_with_scores(question, top_k=candidate_k)
         sparse_raw = self.bm25.query_with_scores(question, top_k=candidate_k)
         dense_std = self._standardize_results(dense_raw, 'dense')
         sparse_std = self._standardize_results(sparse_raw, 'sparse')
         return self._fuse_results(dense_std, sparse_std, top_k)
+    
 
     def batch_retrieve(self, questions: List[str], top_k: int = 5, candidate_k: int = 50) -> List[List[Dict]]:
         dense_batch = self.dense.batch_query_with_scores(questions, top_k=candidate_k)
@@ -288,16 +331,16 @@ class RerankRetriever:
     def __init__(
         self,
         base_retriever=None,
-        reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-2-v2",
+        reranker_model: str = "castorini/rankllama-v1-7b-lora-passage",  # Keep Llama model
         device: Optional[str] = None,
-        max_length: int = 256,
-        batch_size: int = 64,
+        max_length: int = 512,
+        batch_size: int = 2,  # Reduced batch size for CPU
         cache_size: int = 5000,
-        max_rerank_candidates: int = 20
+        max_rerank_candidates: int = 10  # Reduced candidate count
     ):
-        self.base = base_retriever if base_retriever else DenseRetriever(device=device)
+        self.base = base_retriever if base_retriever else DenseRetriever(device="cpu")
         self.max_rerank_candidates = max_rerank_candidates
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = device or "cpu"  # Force CPU
         self.reranker_name = reranker_model
         self.max_length = max_length
         self.batch_size = batch_size
@@ -306,41 +349,79 @@ class RerankRetriever:
 
     def _init_reranker(self):
         try:
-            logger.info(f"Loading reranker: {self.reranker_name}")
-            self.tokenizer = AutoTokenizer.from_pretrained(self.reranker_name, truncation_side='left')
-            self.reranker = AutoModelForSequenceClassification.from_pretrained(
-                self.reranker_name,
-                torch_dtype=torch.float16 if 'cuda' in self.device else torch.float32
-            ).to(self.device).eval()
-            if hasattr(torch, 'compile') and 'cuda' in self.device:
-                self.reranker = torch.compile(self.reranker)
-            logger.info(f"Reranker loaded on {self.device} with AMP")
+            token = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_HUB_TOKEN")
+            if token:
+                try:
+                    login(token=token)
+                except Exception:
+                    pass
+
+            logger.info(f"Loading RankLLaMA LoRA: {self.reranker_name}")
+            
+            # Load PEFT model
+            peft_cfg = PeftConfig.from_pretrained(self.reranker_name, **_auth_kwargs(token))
+            base_name = peft_cfg.base_model_name_or_path or "meta-llama/Llama-2-7b-hf"
+            
+            # Load tokenizer
+            tok = AutoTokenizer.from_pretrained(base_name, use_fast=True, **_auth_kwargs(token))
+            if tok.pad_token is None:
+                tok.pad_token = tok.eos_token
+            tok.padding_side = "right"
+
+            # Load base model
+            base = AutoModelForSequenceClassification.from_pretrained(
+                base_name,
+                num_labels=1,
+                torch_dtype=torch.float32,  # Use float32 on CPU
+                **_auth_kwargs(token),
+            )
+            base.config.pad_token_id = tok.pad_token_id
+
+            # Apply PEFT and merge
+            model = PeftModel.from_pretrained(base, self.reranker_name, **_auth_kwargs(token))
+            self.reranker = model.merge_and_unload().to(self.device).eval()
+            self.tokenizer = tok
+
+            # Ensure proper token IDs
+            self.reranker.config.pad_token_id = tok.pad_token_id
+            if getattr(self.reranker.config, "eos_token_id", None) is None:
+                self.reranker.config.eos_token_id = tok.eos_token_id
+
+            logger.info(f"Reranker ready on {self.device}")
         except Exception as e:
-            logger.error(f"Failed to load reranker: {str(e)}")
+            logger.error(f"Failed to load RankLLaMA LoRA: {e}")
             raise RuntimeError("Reranker initialization failed") from e
+        
+    
+    def _format_pairs(self, query: str, docs: List[str]):
+        # RankLLaMA uses explicit prefixes
+        lefts  = [f"query: {query}"] * len(docs)
+        rights = [f"document: {d}" for d in docs]
+        return list(zip(lefts, rights))
 
     def _compute_scores_uncached(self, query: str, documents: Tuple[str, ...]) -> List[float]:
-        pairs = [(query, doc) for doc in documents]
-        scores = []
-        amp_ctx = torch.cuda.amp.autocast if (self.device.startswith("cuda") and torch.cuda.is_available()) else nullcontext
+        docs = list(documents)
+        pairs = self._format_pairs(query, docs)
+        scores: List[float] = []
+
+        # Disable autocast on CPU
         for i in range(0, len(pairs), self.batch_size):
-            batch = pairs[i:i+self.batch_size]
+            batch_pairs = pairs[i:i + self.batch_size]
             features = self.tokenizer(
-                batch,
-                padding='longest',
+                text=[p[0] for p in batch_pairs],
+                text_pair=[p[1] for p in batch_pairs],
+                padding=True,
                 truncation=True,
                 max_length=self.max_length,
-                return_tensors="pt",
-                return_token_type_ids=False
+                return_token_type_ids=False,
+                return_tensors="pt"
             ).to(self.device)
-            with torch.no_grad(), amp_ctx():
-                outputs = self.reranker(**features)
-                logits = outputs.logits
-                if logits.shape[1] == 1:
-                    batch_scores = logits.squeeze(-1).float().cpu().numpy()
-                else:
-                    batch_scores = logits[:, 1].float().cpu().numpy()
-            scores.extend(batch_scores.tolist())
+
+            with torch.no_grad():
+                out = self.reranker(**features)
+                logits = out.logits
+                batch_scores = logits.squeeze(-1).float().cpu().tolist()
+            scores.extend(batch_scores)
         return scores
 
     def _get_scores(self, query: str, documents: List[str]) -> List[float]:
@@ -381,7 +462,7 @@ class RerankRetriever:
         self,
         question: str,
         top_k: int = 5,
-        candidates_k: int = 50,
+        candidates_k: int = 20,  # Reduced candidate count
         strategy: str = "cross_encoder",
         fast_mode: bool = True,
         **kwargs
@@ -393,7 +474,7 @@ class RerankRetriever:
         self,
         questions: List[str],
         top_k: int = 5,
-        candidates_k: int = 50,
+        candidates_k: int = 20,  # Reduced candidate count
         strategy: str = "cross_encoder",
         fast_mode: bool = True,
         **kwargs
@@ -416,14 +497,14 @@ class RerankRetriever:
         return results
 
 # -------------------------------
-# Experiment runner (adds METADATA)
+# Experiment runner
 # -------------------------------
 def run_rerank_experiment(
     retriever_type: str,
     cross_encoder_model: str,
     top_k: int = 5,
-    candidate_k: int = 50,
-    batch_size: int = 32,
+    candidate_k: int = 20,  # Reduced candidate count
+    batch_size: int = 16,
     prefix: str = None
 ):
     # --- build base + reranker ---
@@ -439,24 +520,26 @@ def run_rerank_experiment(
     retriever = RerankRetriever(
         base_retriever=base_retriever,
         reranker_model=cross_encoder_model,
-        device="cpu"
+        device="cpu",
+        batch_size=2,  # Reduced batch size
+        max_rerank_candidates=10  # Reduced candidate count
     )
     evaluator = RetrieverEvaluator(retriever, batch_size=batch_size, candidate_k=candidate_k)
 
-    # Describe everything used in this run (metadata goes into the JSON)
+    # Describe everything used in this run
     run_meta_common = {
-        "experiment_prefix": prefix or f"RERANK_ALPHA_{retriever_type}",
+        "experiment_prefix": prefix or f"RERANK_{retriever_type}",
         "retrieval_top_k": top_k,
         "candidate_k": candidate_k,
         "base_retriever": _describe_base_retriever(base_retriever),
         "reranker": _describe_reranker(retriever),
-        "rerank_strategy": "cross_encoder",  # evaluator uses default strategy
+        "rerank_strategy": "cross_encoder",
     }
 
     SINGLEHOP_FILE = DATA_DIR / "test" / "test_dataset_singlehop.json"
     MULTIHOP_FILE = DATA_DIR / "test" / "test_dataset_multihop.json"
 
-    base_prefix = prefix or f"RERANK_ALPHA_{retriever_type}"
+    base_prefix = prefix or f"RERANK_{retriever_type}"
 
     # --- SINGLEHOP ---
     print(f"\n=== Evaluating SINGLEHOP dataset ({retriever_type.upper()} + Rerank) ===")
@@ -471,29 +554,8 @@ def run_rerank_experiment(
     else:
         print(f"{retriever_type.upper()}+Rerank Singlehop evaluation failed.")
 
-    # --- COMBINED (singlehop + multihop) ---
-    print(f"\n=== Evaluating COMBINED dataset ({retriever_type.upper()} + Rerank) ===")
-    combined_data = load_and_shuffle_datasets(SINGLEHOP_FILE, MULTIHOP_FILE)
-    temp_combined_file = DATA_DIR / "test" / "test_dataset_combined_temp.json"
-    try:
-        with open(temp_combined_file, "w", encoding="utf-8") as f:
-            json.dump(combined_data, f, ensure_ascii=False, indent=2)
-
-        combined_metrics = evaluator.evaluate_retrieval(temp_combined_file, top_k)
-        if combined_metrics and combined_metrics["num_queries"] > 0:
-            print(f"{retriever_type.upper()}+Rerank Combined: {combined_metrics}")
-            evaluator.save_reports(
-                combined_metrics,
-                prefix=f"{base_prefix}_combined",
-                metadata={**run_meta_common, "dataset": "combined", "combined_sources": ["singlehop", "multihop"], "shuffle": True}
-            )
-        else:
-            print(f"{retriever_type.upper()}+Rerank Combined evaluation failed.")
-    finally:
-        try:
-            temp_combined_file.unlink(missing_ok=True)
-        except Exception as e:
-            logger.warning(f"Could not delete temporary file: {str(e)}")
+    # Skip combined dataset evaluation to save time
+    print("Skipping combined dataset evaluation for faster execution")
 
 # -------------------------------
 # Evaluation plumbing
@@ -501,7 +563,7 @@ def run_rerank_experiment(
 current_dir = Path(__file__).resolve().parent
 root_dir = PROJECT_ROOT
 DATA_DIR = root_dir / "data"
-METRICS_DIR = DATA_DIR / "metrics" / "ablation_metrics_alpha_hybrid"
+METRICS_DIR = DATA_DIR / "metrics" / "ablation_metrics_second_run"
 METRICS_DIR.mkdir(parents=True, exist_ok=True)
 
 def compute_ndcg(relevant_ids: Set[str], retrieved_docs: List[Dict], k: int = 5) -> float:
@@ -527,13 +589,7 @@ def compute_ap(relevant_ids: Set[str], retrieved_docs: List[Dict], k: int = 5) -
     return precision_sum / min(len(relevant_ids), k)
 
 def _describe_base_retriever(base):
-    """
-    Return a dict with the retriever type and its key parameters.
-    Works for DenseRetriever, BM25Retriever, and HybridRetriever.
-    """
     info: Dict[str, Any] = {}
-
-    # Hybrid
     if hasattr(base, "bm25") and hasattr(base, "dense"):
         info["type"] = "hybrid"
         info["hybrid"] = {
@@ -541,8 +597,7 @@ def _describe_base_retriever(base):
             "dense_weight": getattr(base, "dense_weight", None),
             "sparse_weight": getattr(base, "sparse_weight", None),
         }
-        # Describe dense
-        device = os.getenv("DEVICE", "cpu")
+        device = "cpu"
         try:
             mgr = base.dense.vector_db.vector_db
             if hasattr(mgr, "device") and mgr.device:
@@ -550,7 +605,6 @@ def _describe_base_retriever(base):
         except Exception:
             pass
         info["dense"] = {"impl": "DenseRetriever", "device": device}
-        # Describe BM25
         bm = getattr(base, "bm25", None)
         if bm:
             try:
@@ -571,8 +625,6 @@ def _describe_base_retriever(base):
                 "corpus": corpus,
             }
         return info
-
-    # BM25
     if base.__class__.__name__ == "BM25Retriever":
         try:
             lengths = [len(c.split()) for c in getattr(base, "chunks", [])]
@@ -594,9 +646,7 @@ def _describe_base_retriever(base):
                 "corpus": corpus,
             },
         }
-
-    # Dense
-    device = os.getenv("DEVICE", "cpu")
+    device = "cpu"
     try:
         mgr = base.vector_db.vector_db
         if hasattr(mgr, "device") and mgr.device:
@@ -606,7 +656,6 @@ def _describe_base_retriever(base):
     return {"type": "dense", "dense": {"impl": "DenseRetriever", "device": device}}
 
 def _describe_reranker(rerank_retriever):
-    """Return a dict with reranker model + inference settings."""
     return {
         "reranker_model": getattr(rerank_retriever, "reranker_name", None),
         "device": getattr(rerank_retriever, "device", None),
@@ -618,7 +667,7 @@ def _describe_reranker(rerank_retriever):
     }
 
 class RetrieverEvaluator:
-    def __init__(self, retriever: RerankRetriever, batch_size: int = 32, candidate_k: int = 50):
+    def __init__(self, retriever: RerankRetriever, batch_size: int = 32, candidate_k: int = 20):
         self.retriever = retriever
         self.batch_size = batch_size
         self.candidate_k = candidate_k
@@ -651,7 +700,7 @@ class RetrieverEvaluator:
     def _evaluate_query_batch(self, questions: List[str], relevant_docs_batch: List[Set[str]], top_k: int) -> List[Dict[str, Any]]:
         batch_results = []
         start_time = time.perf_counter()
-        retrieved_docs_batch = [self.retriever.retrieve(q, top_k=top_k, candidates_k=getattr(self, "candidate_k", 50)) for q in questions]
+        retrieved_docs_batch = [self.retriever.retrieve(q, top_k=top_k, candidates_k=self.candidate_k) for q in questions]
         retrieval_time = (time.perf_counter() - start_time) / len(questions)
         for i, (retrieved_docs, relevant_set) in enumerate(zip(retrieved_docs_batch, relevant_docs_batch)):
             retrieved_docs = retrieved_docs or []
@@ -699,7 +748,7 @@ class RetrieverEvaluator:
             "avg_retrieval_time": float(df["retrieval_time"].mean())
         }
 
-    def save_reports(self, metrics: Dict[str, Any], prefix: str = "RERANK_eval_ALPHA_", metadata: Dict[str, Any] = None) -> None:
+    def save_reports(self, metrics: Dict[str, Any], prefix: str = "RERANK_eval", metadata: Dict[str, Any] = None) -> None:
         if not metrics or metrics.get("num_queries", 0) == 0:
             print("No metrics to save")
             return
@@ -722,31 +771,20 @@ class RetrieverEvaluator:
             json.dump(payload, f, indent=2, ensure_ascii=False)
 
 # -------------------------------
-# Dataset utils
-# -------------------------------
-def load_and_shuffle_datasets(singlehop_path, multihop_path):
-    with open(singlehop_path, encoding="utf-8") as f1:
-        singlehop = json.load(f1)
-    with open(multihop_path, encoding="utf-8") as f2:
-        multihop = json.load(f2)
-    combined = singlehop + multihop
-    random.shuffle(combined)
-    return combined
-
-# -------------------------------
 # Main
 # -------------------------------
-def main(top_k: int = 5, candidate_k: int = 50):
-    ce_model = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+def main(top_k: int = 5, candidate_k: int = 20):
+    ce_model = "castorini/rankllama-v1-7b-lora-passage"  # Keep Llama model
+
     for retriever_type in ["dense", "bm25", "hybrid"]:
         run_rerank_experiment(
             retriever_type=retriever_type,
             cross_encoder_model=ce_model,
             top_k=top_k,
             candidate_k=candidate_k,
-            batch_size=32,
-            prefix=f"RERANK_ALPHA_{retriever_type}"
+            batch_size=16,
+            prefix=f"RERANK_{retriever_type}"
         )
 
 if __name__ == "__main__":
-    main(top_k=5, candidate_k=50)
+    main(top_k=5, candidate_k=20)

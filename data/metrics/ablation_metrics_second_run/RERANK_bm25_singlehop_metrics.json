@@ -1,0 +1,45 @@
+{
+  "metadata": {
+    "timestamp_utc": "2025-08-10T22:05:14Z",
+    "batch_size_eval": 16,
+    "candidate_k_eval": 20,
+    "experiment_prefix": "RERANK_bm25",
+    "retrieval_top_k": 5,
+    "candidate_k": 20,
+    "base_retriever": {
+      "type": "bm25",
+      "bm25": {
+        "use_stopwords": true,
+        "use_stemming": true,
+        "k1": 1.5,
+        "b": 0.75,
+        "corpus": {
+          "num_chunks": 801,
+          "min_len": 4,
+          "max_len": 2687,
+          "avg_len": 91.82521847690387
+        }
+      }
+    },
+    "reranker": {
+      "reranker_model": "cross-encoder/ms-marco-MiniLM-L-2-v2",
+      "device": "cpu",
+      "max_length": 512,
+      "batch_size": 8,
+      "max_rerank_candidates": 20,
+      "default_strategy": "cross_encoder",
+      "fast_mode_default": true
+    },
+    "rerank_strategy": "cross_encoder",
+    "dataset": "singlehop"
+  },
+  "metrics": {
+    "num_queries": 508,
+    "avg_precision@k": 0.047244094488188976,
+    "avg_recall@k": 0.23622047244094488,
+    "avg_mrr": 0.10734908136482939,
+    "avg_ndcg@k": 0.1390279122946607,
+    "avg_ap@k": 0.10734908136482939,
+    "avg_retrieval_time": 0.3826650773623306
+  }
+}

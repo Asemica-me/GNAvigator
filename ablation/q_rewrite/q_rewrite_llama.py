@@ -23,6 +23,7 @@ from typing import List, Dict, Tuple, Union, Optional, Any, Set
 from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
+from contextlib import nullcontext
 
 from dotenv import load_dotenv
 from rank_bm25 import BM25Okapi
@@ -36,6 +37,10 @@ from transformers import (
 from sentence_transformers import SentenceTransformer
 from keybert import KeyBERT
 from peft import PeftModel, PeftConfig
+from packaging import version
+import transformers
+from huggingface_hub import login
+
 
 from vector_store import VectorDatabaseManager
 
@@ -53,8 +58,28 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 DATA_DIR = PROJECT_ROOT / "data"
 METRICS_DIR = DATA_DIR / "metrics"
-ABLATION_METRICS_DIR = METRICS_DIR / "ablation_metrics_alpha_hybrid"
+ABLATION_METRICS_DIR = METRICS_DIR / "ablation_metrics_second_run"
 ABLATION_METRICS_DIR.mkdir(parents=True, exist_ok=True)
+
+from huggingface_hub import snapshot_download
+
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS", "1")   # force copy instead of symlink
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")        # avoid xet path that was flaky earlier
+os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1") 
+
+def prefetch_repo(repo_id: str):
+    tok = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_HUB_TOKEN")
+    snapshot_download(
+        repo_id=repo_id,
+        token=tok,
+        resume_download=True,
+        local_dir_use_symlinks=False, 
+        max_workers=4
+    )
+
+# call these once at startup
+prefetch_repo("meta-llama/Llama-2-7b-hf")
+prefetch_repo("castorini/rankllama-v1-7b-lora-passage")
 
 # -------------------------------
 # helpers
@@ -241,15 +266,22 @@ class BM25Retriever:
     def batch_query_with_scores(self, questions: List[str], top_k: int = 20) -> List[List[Dict[str, Any]]]:
         return self.batch_retrieve(questions, k=top_k)
 
-
 class HybridRetriever:
-    def __init__(self, rrf_k: int = 60, dense_weight: float = 1.0, sparse_weight: float = 1.0, device: Optional[str] = None):
+    def __init__(self, rrf_k=60, dense_weight=1.0, sparse_weight=1.0, device=None, alpha=0.3):
         self.dense = DenseRetriever(device=device)
         self.bm25 = BM25Retriever()
         self.rrf_k = rrf_k
-        self.dense_weight = dense_weight
-        self.sparse_weight = sparse_weight
+        self.alpha = alpha
         self._validate_retriever_consistency()
+
+    def _minmax_norm(self, scores: Dict[str, float]) -> Dict[str, float]:
+        if not scores:
+            return {}
+        vmin, vmax = min(scores.values()), max(scores.values())
+        if vmax == vmin:
+            return {k: 1.0 for k in scores}  # all equal → 1.0
+        return {k: (v - vmin) / (vmax - vmin) for k, v in scores.items()}
+        
 
     def _validate_retriever_consistency(self):
         try:
@@ -278,26 +310,32 @@ class HybridRetriever:
             }
         return std
 
-    def _fuse(self, dense_std: Dict[str, Dict[str, Any]], sparse_std: Dict[str, Dict[str, Any]], top_k: int) -> List[Dict[str, Any]]:
-        all_ids = set(dense_std) | set(sparse_std)
+    def _fuse(self, dense_results: Dict[str, Dict], sparse_results: Dict[str, Dict], top_k: int) -> List[Dict]:
+        # collect raw scores per retriever
+        d_raw = {doc_id: d['score'] for doc_id, d in dense_results.items()}
+        s_raw = {doc_id: s['score'] for doc_id, s in sparse_results.items()}
+        # normalize within each list (per query)
+        d = self._minmax_norm(d_raw)
+        s = self._minmax_norm(s_raw)
+        # union of docs
+        all_ids = set(dense_results) | set(sparse_results)
         fused = []
-        for did in all_ids:
-            dr = dense_std.get(did, {}).get("rank", math.inf)
-            sr = sparse_std.get(did, {}).get("rank", math.inf)
-            score = 0.0
-            if dr != math.inf:
-                score += self.dense_weight / (self.rrf_k + dr)
-            if sr != math.inf:
-                score += self.sparse_weight / (self.rrf_k + sr)
-            fused.append((score, dense_std.get(did) or sparse_std.get(did)))
+        for doc_id in all_ids:
+            Sd = d.get(doc_id, 0.0)
+            Ss = s.get(doc_id, 0.0)
+            Sh = self.alpha * Ss + Sd  # Sh = α·Ss + Sd (Wang 2023 paper)
+            base = dense_results.get(doc_id) or sparse_results.get(doc_id)
+            fused.append((Sh, {**base, "hybrid_score": Sh}))
         fused.sort(key=lambda x: x[0], reverse=True)
         return [doc for _, doc in fused[:top_k]]
 
-    def retrieve(self, question: str, top_k: int = 5, candidate_k: int = 50) -> List[Dict[str, Any]]:
-        d = self.dense.query_with_scores(question, top_k=candidate_k)
-        s = self.bm25.query_with_scores(question, top_k=candidate_k)
-        return self._fuse(self._standardize(d, "dense"), self._standardize(s, "sparse"), top_k)
-
+    def retrieve(self, question: str, top_k: int = 5, candidate_k: int = 50) -> List[Dict]:
+        dense_raw = self.dense.query_with_scores(question, top_k=candidate_k)
+        sparse_raw = self.bm25.query_with_scores(question, top_k=candidate_k)
+        dense_std = self._standardize_results(dense_raw, 'dense')
+        sparse_std = self._standardize_results(sparse_raw, 'sparse')
+        return self._fuse(dense_std, sparse_std, top_k)
+    
     def batch_retrieve(self, questions: List[str], top_k: int = 5, candidate_k: int = 50) -> List[List[Dict[str, Any]]]:
         out = []
         for q in questions:
@@ -314,10 +352,10 @@ class RerankRetriever:
         base_retriever=None,
         reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-2-v2",
         device: Optional[str] = None,
-        max_length: int = 256,
+        max_length: int = 512,
         batch_size: int = 64,
         cache_size: int = 5000,
-        max_rerank_candidates: int = 20,
+        max_rerank_candidates: int = 20
     ):
         self.base = base_retriever if base_retriever else DenseRetriever(device=device)
         self.max_rerank_candidates = max_rerank_candidates
@@ -330,40 +368,107 @@ class RerankRetriever:
 
     def _init_reranker(self):
         try:
-            logger.info("Loading reranker: %s", self.reranker_name)
-            self.tokenizer = AutoTokenizer.from_pretrained(self.reranker_name, truncation_side="left")
-            self.reranker = AutoModelForSequenceClassification.from_pretrained(
-                self.reranker_name,
-                torch_dtype=(torch.float16 if ("cuda" in self.device) else torch.float32),
-            ).to(self.device).eval()
-        except Exception as e:
-            logger.error("Failed to load reranker: %s", e)
-            raise
+            token = os.getenv("HF_TOKEN")
+            if token:
+                try:
+                    login(token=token)
+                except Exception:
+                    pass
 
-    def _compute_scores_uncached(self, query: str, documents: Tuple[str, ...]) -> List[float]:
-        scores: List[float] = []
-        use_amp = self.device.startswith("cuda") and torch.cuda.is_available()
-        for i in range(0, len(documents), self.batch_size):
-            pairs = [(query, d) for d in documents[i:i + self.batch_size]]
-            feats = self.tokenizer(
-                pairs,
-                padding="longest",
-                truncation=True,
-                max_length=self.max_length,
-                return_tensors="pt",
-                return_token_type_ids=False,
-            ).to(self.device)
-            with torch.no_grad(), (torch.cuda.amp.autocast() if use_amp else torch.autocast("cpu", enabled=False)):
-                logits = self.reranker(**feats).logits
-                if logits.shape[1] == 1:
-                    s = logits.squeeze(-1).float().cpu().numpy()
-                else:
-                    s = logits[:, 1].float().cpu().numpy()
-            scores.extend(s.tolist())
-        return scores
+            logger.info(f"Loading PEFT reranker adapter: {self.reranker_name}")
+            peft_cfg = PeftConfig.from_pretrained(self.reranker_name, token=token)
+
+            base_name = peft_cfg.base_model_name_or_path # or "meta-llama/Llama-2-7b-hf"
+
+            # Handle token kwarg change across transformers versions
+            kw = {"token": token} if version.parse(transformers.__version__) >= version.parse("4.37.0") else {"use_auth_token": token}
+
+            base = AutoModelForSequenceClassification.from_pretrained(
+                base_name,
+                num_labels=1,
+                torch_dtype=torch.float16 if 'cuda' in self.device else torch.float32,
+                **({} if token is None else kw)
+            )
+
+            tok = AutoTokenizer.from_pretrained(base_name, use_fast=True, **({} if token is None else kw))
+            if tok.pad_token is None:
+                tok.pad_token = tok.eos_token
+            tok.truncation_side = "right"
+
+            model = PeftModel.from_pretrained(base, self.reranker_name, **({} if token is None else kw))
+            model = model.merge_and_unload()
+
+            self.reranker = model.to(self.device).eval()
+            self.tokenizer = tok
+            if hasattr(torch, "compile") and self.device.startswith("cuda"):
+                self.reranker = torch.compile(self.reranker)
+
+            logger.info(f"Reranker ready on {self.device}")
+        except Exception as e:
+            # Be explicit if it’s a gated-repo problem
+            if "gated repo" in str(e).lower() or "403" in str(e):
+                logger.error(
+                    "N.B. Llama-2 base is gated."
+                )
+            logger.error(f"Failed to load RankLLaMA LoRA: {e}")
+            raise RuntimeError("Reranker initialization failed") from e
 
     def _get_scores(self, query: str, documents: List[str]) -> List[float]:
         return self.score_cache(query, tuple(documents))
+
+    def _format_pairs(self, query: str, docs: List[str]):
+        # builds ("query: ...", "document: ...") pairs
+        lefts  = [f"query: {query}"] * len(docs)
+        rights = [f"document: {d}" for d in docs]
+        return list(zip(lefts, rights))
+
+    def _compute_scores_uncached(self, query: str, documents: Tuple[str, ...]) -> List[float]:
+        # --- set up ---
+        docs = list(documents)
+        pairs = self._format_pairs(query, docs)   # <-- defines pairs
+        scores: List[float] = []                  # <-- defines scores
+
+        # length bucketing (reduces padding waste)
+        order = sorted(range(len(pairs)), key=lambda i: len(pairs[i][1]))
+        inv = [0]*len(order)
+        for new_i, old_i in enumerate(order):
+            inv[new_i] = old_i
+        pairs = [pairs[i] for i in order]
+
+        # micro-batch with OOM backoff (works on CPU/GPU)
+        micro = min(self.batch_size, 64)
+        amp_ctx = torch.cuda.amp.autocast if (self.device.startswith("cuda") and torch.cuda.is_available()) else nullcontext
+
+        i = 0
+        while i < len(pairs):
+            try:
+                j = min(i + micro, len(pairs))
+                features = self.tokenizer(
+                    text=[p[0] for p in pairs[i:j]],
+                    text_pair=[p[1] for p in pairs[i:j]],
+                    padding=True,
+                    truncation=True,
+                    max_length=self.max_length,
+                    return_token_type_ids=False,
+                    return_tensors="pt",
+                ).to(self.device)
+
+                with torch.no_grad(), amp_ctx():
+                    logits = self.reranker(**features).logits  # [B, 1]
+                scores.extend(logits.squeeze(-1).float().cpu().tolist())
+                i = j
+            except RuntimeError as e:
+                if "CUDA out of memory" in str(e) and micro > 1:
+                    torch.cuda.empty_cache()
+                    micro = max(1, micro // 2)
+                else:
+                    raise
+
+        # restore original order
+        restored = [None] * len(scores)
+        for new_i, old_i in enumerate(inv):
+            restored[old_i] = scores[new_i]
+        return restored
 
     def rerank(self, query: str, candidates: List[Dict[str, Any]], top_k: int = 5) -> List[Dict[str, Any]]:
         if len(candidates) > self.max_rerank_candidates:
@@ -961,7 +1066,7 @@ def load_and_shuffle_datasets(singlehop_path: Path, multihop_path: Path) -> List
 # Runner: QueryRewrite vs base
 # ===============================
 def run_query_rewrite_vs_base_retrievers(top_k: int = 5, candidate_k: int = 50):
-    ce_model = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    ce_model = "castorini/rankllama-v1-7b-lora-passage" 
 
     dense = DenseRetriever(device="cpu")
     bm25 = BM25Retriever()
@@ -993,10 +1098,10 @@ def run_query_rewrite_vs_base_retrievers(top_k: int = 5, candidate_k: int = 50):
                 enable_prf=True,
                 enable_decompose=True,
             )
-            evaluator = RetrieverEvaluator(qrr, batch_size=32, candidate_k=candidate_k)
+            evaluator = RetrieverEvaluator(qrr, batch_size=16, candidate_k=candidate_k)
 
             common_meta = {
-                "experiment_prefix": f"QUERY-REWRITE_ALPHA_{name}",
+                "experiment_prefix": f"QUERY-REWRITE_{name}",
                 "retrieval_top_k": top_k,
                 "candidate_k": candidate_k,
                 "query_rewriter": _describe_query_rewriter(qrr),
@@ -1006,7 +1111,7 @@ def run_query_rewrite_vs_base_retrievers(top_k: int = 5, candidate_k: int = 50):
             print(f"\n--- SINGLEHOP ({name}) ---")
             single = evaluator.evaluate_retrieval(SINGLEHOP_FILE, top_k)
             if single and single["num_queries"] > 0:
-                evaluator.save_reports(single, prefix=f"QUERY-REWRITE_ALPHA_{name}_singlehop", metadata={**common_meta, "dataset": "singlehop"})
+                evaluator.save_reports(single, prefix=f"QUERY-REWRITE_{name}_singlehop", metadata={**common_meta, "dataset": "singlehop"})
                 print("Saved singlehop.")
 
             # COMBINED
@@ -1020,7 +1125,7 @@ def run_query_rewrite_vs_base_retrievers(top_k: int = 5, candidate_k: int = 50):
                 if allm and allm["num_queries"] > 0:
                     evaluator.save_reports(
                         allm,
-                        prefix=f"QUERY-REWRITE_ALPHA_{name}_combined",
+                        prefix=f"QUERY-REWRITE_{name}_combined",
                         metadata={**common_meta, "dataset": "combined", "combined_sources": ["singlehop", "multihop"], "shuffle": True},
                     )
                     print("Saved combined.")

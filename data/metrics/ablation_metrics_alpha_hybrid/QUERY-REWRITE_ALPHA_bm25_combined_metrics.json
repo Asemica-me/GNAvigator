@@ -1,0 +1,53 @@
+{
+  "metadata": {
+    "timestamp_utc": "2025-08-09T11:38:13Z",
+    "batch_size_eval": 32,
+    "candidate_k_eval": 50,
+    "experiment_prefix": "QUERY-REWRITE_ALPHA_bm25",
+    "retrieval_top_k": 5,
+    "candidate_k": 50,
+    "query_rewriter": {
+      "strategy_flags": {
+        "enable_cce": true,
+        "enable_kwr": true,
+        "enable_gqr": true,
+        "enable_prf": true,
+        "enable_decompose": true
+      },
+      "expansion_terms": 3,
+      "lang": "italian",
+      "device": "cpu",
+      "base_retriever": {
+        "type": "bm25",
+        "bm25": {
+          "use_stopwords": true,
+          "use_stemming": true,
+          "k1": 1.5,
+          "b": 0.75,
+          "corpus": {
+            "num_chunks": 801,
+            "min_len": 4,
+            "max_len": 2687,
+            "avg_len": 91.82521847690387
+          }
+        }
+      },
+      "reranker": null
+    },
+    "dataset": "combined",
+    "combined_sources": [
+      "singlehop",
+      "multihop"
+    ],
+    "shuffle": true
+  },
+  "metrics": {
+    "num_queries": 908,
+    "avg_precision@k": 0.14449339207048456,
+    "avg_recall@k": 0.4665014684287812,
+    "avg_mrr": 0.4215308370044053,
+    "avg_ndcg@k": 0.48337668262085054,
+    "avg_ap@k": 0.29381577337249143,
+    "avg_retrieval_time": 1.3661978396470145
+  }
+}
