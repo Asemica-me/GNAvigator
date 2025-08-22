@@ -1,0 +1,13 @@
+cff-version: 1.0.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: Pograri
+    given-names: Lucrezia
+    orcid: 
+title: "Question-Answering RAG System for Geoportale Nazionale Archeologia"
+version: 1.0.0
+license: CC-BY-4.0
+identifiers:
+  - type: DOI
+    value: 
+date-released: 2025-07-08
