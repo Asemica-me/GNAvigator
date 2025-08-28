@@ -60,7 +60,7 @@ plt.close()
 # 2. Rating Proportion Pie Chart with descriptive labels
 plt.figure(figsize=(8, 8))
 explode = (0.05, 0.05, 0.05)
-colors = ['#ff6b6b', '#ffd166', '#06d6a0']  # Red/Amber/Green
+colors = ["#874cdf", "#e0b047", "#0d968f"]  # Red/Amber/Green
 
 # Create custom labels with counts and percentages
 pie_labels = [f'{label}: {count/total*100:.1f}% ({count} ratings)' 
